@@ -14,8 +14,8 @@ using hash_map = phmap::flat_hash_map<Key, Value>;
 class DictionaryBuilder {
     std::string dict_path_;
     std::string file_path_;
-    uint triplet_cnt_ = 0;
-    MMap<uint> menagement_data_;
+    ulong triplet_cnt_ = 0;
+    MMap<ulong> menagement_data_;
 
     hash_map<std::string, uint> subjects_;
     hash_map<std::string, uint> predicates_;
@@ -32,7 +32,7 @@ class DictionaryBuilder {
                            uint menagement_file_offset,
                            uint max_threads);
 
-    void SaveDict(uint max_threads) ;
+    void SaveDict(uint max_threads);
 
    public:
     DictionaryBuilder(std::string& dict_path, std::string& file_path);

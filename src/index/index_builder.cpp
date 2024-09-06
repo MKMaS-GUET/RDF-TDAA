@@ -44,32 +44,44 @@ void IndexBuilder::BuildPredicateIndex(std::vector<PredicateIndex>& predicate_in
         predicate_rank.insert(predicate_rank.begin() + i, {pid, size});
     }
 
-    double finished = 0;
+    std::deque<uint> task_queue;
+    std::mutex task_queue_mutex;
+    std::condition_variable task_queue_cv;
+    std::atomic<bool> task_queue_empty{false};
+
     uint cpu_count = std::thread::hardware_concurrency();
 
-    std::queue<uint> task_queue;
-    for (uint i = 0; i < dict_.predicate_cnt(); i++) {
-        task_queue.push(predicate_rank[i].first);
-    }
+    for (uint i = 0; i < dict_.predicate_cnt(); i++)
+        task_queue.push_back(predicate_rank[i].first);
+
     std::vector<std::thread> threads;
     for (uint tid = 0; tid < cpu_count; tid++) {
         threads.emplace_back(std::bind(&IndexBuilder::SubBuildPredicateIndex, this, &task_queue,
-                                       &predicate_indexes, &finished));
+                                       &task_queue_mutex, &task_queue_cv, &task_queue_empty,
+                                       &predicate_indexes));
     }
-    for (auto& t : threads) {
+    for (auto& t : threads)
         t.join();
-    }
 }
 
-void IndexBuilder::SubBuildPredicateIndex(std::queue<uint>* task_queue,
-                                          std::vector<PredicateIndex>* predicate_indexes,
-                                          double* finished) {
-    uint pid;
-    while (task_queue->size()) {
-        mtx_.lock();
-        pid = task_queue->front();
-        task_queue->pop();
-        mtx_.unlock();
+void IndexBuilder::SubBuildPredicateIndex(std::deque<uint>* task_queue,
+                                          std::mutex* task_queue_mutex,
+                                          std::condition_variable* task_queue_cv,
+                                          std::atomic<bool>* task_queue_empty,
+                                          std::vector<PredicateIndex>* predicate_indexes) {
+    while (true) {
+        std::unique_lock<std::mutex> lock(*task_queue_mutex);
+        while (task_queue->empty() && !task_queue_empty->load())
+            task_queue_cv->wait(lock);
+        if (task_queue->empty())
+            break;  // No more tasks
+
+        uint pid = task_queue->front();
+        task_queue->pop_front();
+        if (task_queue->empty()) {
+            task_queue_empty->store(true);
+        }
+        lock.unlock();
 
         predicate_indexes->at(pid - 1).Build(pso_->at(pid));
     }
@@ -78,19 +90,17 @@ void IndexBuilder::SubBuildPredicateIndex(std::queue<uint>* task_queue,
 void IndexBuilder::StorePredicateIndexNoCompress(std::vector<PredicateIndex>& predicate_indexes) {
     auto beg = std::chrono::high_resolution_clock::now();
 
-    uint predicate_index_arrays_file_size = 0;
+    ulong predicate_index_arrays_file_size = 0;
     for (uint pid = 1; pid <= dict_.predicate_cnt(); pid++) {
-        predicate_index_arrays_file_size += predicate_indexes[pid - 1].s_set_.size() * 4;
-        predicate_index_arrays_file_size += predicate_indexes[pid - 1].o_set_.size() * 4;
+        predicate_index_arrays_file_size += ulong(predicate_indexes[pid - 1].s_set_.size() * 4ul);
+        predicate_index_arrays_file_size += ulong(predicate_indexes[pid - 1].o_set_.size() * 4ul);
     }
     MMap<uint> predicate_index_ =
         MMap<uint>(db_index_path_ + "predicate_index", dict_.predicate_cnt() * 2 * 4);
     MMap<uint> predicate_index_arrays =
         MMap<uint>(db_index_path_ + "predicate_index_arrays", predicate_index_arrays_file_size);
 
-    std::cout << predicate_index_arrays_file_size << std::endl;
-
-    uint arrays_file_offset = 0;
+    ulong arrays_file_offset = 0;
     phmap::btree_set<uint>* ps_set;
     phmap::btree_set<uint>* po_set;
     for (uint pid = 1; pid <= dict_.predicate_cnt(); pid++) {
@@ -121,11 +131,11 @@ void IndexBuilder::StorePredicateIndexNoCompress(std::vector<PredicateIndex>& pr
 }
 
 void IndexBuilder::StorePredicateIndex(std::vector<PredicateIndex>& predicate_indexes) {
-    uint predicate_index_file_size_ = dict_.predicate_cnt() * 4 * 4;
+    ulong predicate_index_file_size_ = dict_.predicate_cnt() * 4 * 4;
 
     MMap<uint> predicate_index = MMap<uint>(db_index_path_ + "predicate_index", predicate_index_file_size_);
 
-    uint total_compressed_size = 0;
+    ulong total_compressed_size = 0;
     std::vector<std::pair<uint8_t*, uint>> compressed_ps_set(dict_.predicate_cnt());
     std::vector<std::pair<uint8_t*, uint>> compressed_po_set(dict_.predicate_cnt());
 
@@ -134,7 +144,7 @@ void IndexBuilder::StorePredicateIndex(std::vector<PredicateIndex>& predicate_in
     uint* set_buffer;
     uint buffer_offset;
     uint8_t* compressed_buffer;
-    uint compressed_size;
+    ulong compressed_size;
     uint last;
     for (uint pid = 1; pid <= dict_.predicate_cnt(); pid++) {
         ps_set = &predicate_indexes[pid - 1].s_set_;
@@ -223,7 +233,7 @@ void IndexBuilder::BuildCharacteristicSet(std::vector<std::pair<uint, uint>>& to
     PredicateSetTrie trie = PredicateSetTrie();
     uint max_id = 0;
     uint present_id;
-    uint serialize_size = 0;
+    ulong serialize_size = 0;
     std::vector<uint> unique_offset;
     for (uint i = 0; i < predicate_sets.size(); i++) {
         present_id = trie.insert(predicate_sets[i]);
@@ -239,7 +249,7 @@ void IndexBuilder::BuildCharacteristicSet(std::vector<std::pair<uint, uint>>& to
 
     // prepare for serializing
     uint* serialize_data = new uint[serialize_size];
-    uint offset = 0;
+    ulong offset = 0;
     for (uint i = 0; i < unique_offset.size(); i++) {
         std::vector<uint>& set = predicate_sets[unique_offset[i]];
         std::copy(set.begin(), set.end(), serialize_data + offset);
@@ -256,10 +266,12 @@ void IndexBuilder::BuildCharacteristicSet(std::vector<std::pair<uint, uint>>& to
     trie.~PredicateSetTrie();
 }
 
-void IndexBuilder::CompressAndSave(uint* data, uint size, std::string filename) {
+void IndexBuilder::CompressAndSave(uint* data, ulong size, std::string filename) {
     uint max_compressed_length = streamvbyte_max_compressedbytes(size);
     uint8_t* compressed_buffer = new uint8_t[max_compressed_length];
 
+    if (size > UINT_MAX)
+        std::cout << "error size: " << size << std::endl;
     uint compressed_length = streamvbyte_encode(data, size, compressed_buffer);  // encoding
 
     std::ofstream outfile(filename, std::ios::binary);
@@ -333,24 +345,35 @@ uint IndexBuilder::BuildEntitySets(std::vector<std::pair<uint, uint>>& to_set_id
     return std::ceil(std::log2(max));
 }
 
+void printBinary1(uint n) {
+    for (int i = sizeof(n) * 8 - 1; i >= 0; --i) {
+        std::cout << ((n >> i) & 1);
+    }
+    std::cout << std::endl;
+}
+
 void IndexBuilder::BuildAndSaveIndex(std::vector<std::pair<uint, uint>>& to_set_id,
                                      std::vector<std::vector<std::vector<uint>>>& entity_set,
                                      uint levels_width,
                                      Order order) {
     // std::cout << levels_width << std::endl;
-    uint entity_cnt = entity_set.size();
+    ulong entity_cnt = entity_set.size();
     std::string prefix = (order == Order::kSPO) ? "spo" : "ops";
 
-    uint all_arr_size = dict_.triplet_cnt();
+    ulong all_arr_size = dict_.triplet_cnt();
 
     MMap<uint> daa_levels;
+    ulong file_size;
     if (compress_levels_)
-        daa_levels =
-            MMap<uint>(db_index_path_ + prefix + "_daa_levels", (all_arr_size * levels_width + 7) / 8);
+        file_size = ulong(all_arr_size * ulong(levels_width) + 7ul) / 8ul;
     else
-        daa_levels = MMap<uint>(db_index_path_ + prefix + "_daa_levels", all_arr_size * 4);
-    MMap<char> daa_level_end = MMap<char>(db_index_path_ + prefix + "_daa_level_end", (all_arr_size + 7) / 8);
-    MMap<char> daa_array_end = MMap<char>(db_index_path_ + prefix + "_daa_array_end", (all_arr_size + 7) / 8);
+        file_size = all_arr_size * 4;
+    daa_levels = MMap<uint>(db_index_path_ + prefix + "_daa_levels", file_size);
+
+    MMap<char> daa_level_end =
+        MMap<char>(db_index_path_ + prefix + "_daa_level_end", ulong(all_arr_size + 7ul) / 8ul);
+    MMap<char> daa_array_end =
+        MMap<char>(db_index_path_ + prefix + "_daa_array_end", ulong(all_arr_size + 7ul) / 8ul);
 
     uint daa_file_offset = 0;
 
@@ -427,8 +450,9 @@ void IndexBuilder::BuildAndSaveIndex(std::vector<std::pair<uint, uint>>& to_set_
     }
 
     if (compress_to_daa_) {
-        MMap<uint> to_daa = MMap<uint>(db_index_path_ + prefix + "_to_daa",
-                                       ((chara_set_id_width + daa_offset_width) * entity_cnt + 7) / 8);
+        file_size =
+            ulong(ulong(ulong(ulong(chara_set_id_width) + ulong(daa_offset_width)) * entity_cnt) + 7ul) / 8ul;
+        MMap<uint> to_daa = MMap<uint>(db_index_path_ + prefix + "_to_daa", file_size);
 
         ulong to_daa_buffer = 0;
         uint to_daa_buffer_offset = 31;
@@ -455,7 +479,7 @@ void IndexBuilder::BuildAndSaveIndex(std::vector<std::pair<uint, uint>>& to_set_
 
         to_daa.CloseMap();
     } else {
-        MMap<uint> to_daa = MMap<uint>(db_index_path_ + prefix + "_to_daa", entity_cnt * 2 * 4);
+        MMap<uint> to_daa = MMap<uint>(db_index_path_ + prefix + "_to_daa", ulong(entity_cnt * 2ul * 4ul));
         for (uint id = 1; id <= entity_cnt; id++) {
             to_daa[(id - 1) * 2] = to_set_id[id - 1].first;
             to_daa[(id - 1) * 2 + 1] = daa_offsets[id - 1];

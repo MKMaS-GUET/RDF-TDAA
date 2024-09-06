@@ -53,7 +53,7 @@ class IndexRetriever {
     DAA spo_;
     DAA ops_;
 
-    uint predicate_index_arrays_file_size_;
+    ulong predicate_index_arrays_file_size_;
     MMap<uint> predicate_index_;
     MMap<uint> predicate_index_arrays_no_compress_;
     MMap<uint8_t> predicate_index_arrays_;
@@ -63,7 +63,7 @@ class IndexRetriever {
     std::vector<std::vector<uint>> subject_characteristic_set_;
     std::vector<std::vector<uint>> object_characteristic_set_;
 
-    uint FileSize(std::string file_name);
+    ulong FileSize(std::string file_name);
 
     void Init();
 
@@ -71,9 +71,9 @@ class IndexRetriever {
 
     uint AccessBitSequence(MMap<uint>& bits, uint data_width, ulong bit_start);
 
-    uint AccessToDAA(DAA& daa, uint offset);
+    uint AccessToDAA(DAA& daa, ulong offset);
 
-    uint AccessLevels(uint offset, Order order);
+    uint AccessLevels(ulong offset, Order order);
 
     std::shared_ptr<Result> AccessDAA(uint offset, uint daa_start, uint daa_size, Order order);
 

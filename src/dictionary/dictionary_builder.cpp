@@ -94,10 +94,10 @@ void DictionaryBuilder::ReassignIDAndSave(hash_map<std::string, uint>& map,
     phmap::btree_map<std::size_t, std::pair<uint, const std::string*>> hash2id;
     phmap::flat_hash_map<uint, std::vector<std::string>> conflicts;
     uint nodes_per_thread = (map.size()) ? map.size() / max_threads : 0;
-    std::size_t offset = 0;
-    std::size_t size = 0;
-    uint id = 1;
-    uint cnt = 0;
+    ulong offset = 0;
+    ulong size = 0;
+    ulong id = 1;
+    ulong cnt = 0;
     for (auto it = map.begin(); it != map.end(); it++) {
         it->second = id;
         size = it->first.size() + 1;
@@ -122,7 +122,7 @@ void DictionaryBuilder::ReassignIDAndSave(hash_map<std::string, uint>& map,
                 conflicts[hash].push_back(it->first);
         }
     }
-    uint file_size = (sizeof(std::size_t) + 4) * hash2id.size();
+    ulong file_size = (sizeof(std::size_t) + 4) * hash2id.size();
     MMap<std::size_t> hashes = MMap<std::size_t>(hashmap_path, file_size);
     for (auto it = hash2id.begin(); it != hash2id.end(); it++)
         hashes.Write(it->first);
@@ -190,7 +190,7 @@ void DictionaryBuilder::Build() {
 
     uint max_threads = 6;
 
-    menagement_data_ = MMap<uint>(dict_path_ + "/menagement_data", (5 + (2 * max_threads * 3)) * 4);
+    menagement_data_ = MMap<ulong>(dict_path_ + "/menagement_data", (5 + (2 * max_threads * 3)) * 8);
 
     Init();
 

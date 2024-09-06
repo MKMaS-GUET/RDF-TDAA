@@ -93,10 +93,10 @@ void RDFTDAA::Query(const std::string& db_name, const std::string& data_file) {
             auto parser = std::make_shared<SPARQLParser>(sparql);
             auto query_plan = std::make_shared<PlanGenerator>(index, parser->TripleList());
             auto plan_end = std::chrono::high_resolution_clock::now();
-
+            
             auto executor = std::make_shared<QueryExecutor>(index, query_plan, parser->Limit());
             executor->Query();
-            std::cout << "query finished" << std::endl;
+
             auto projection_start = std::chrono::high_resolution_clock::now();
             uint cnt = QueryResult(executor->result(), index, query_plan, parser);
             auto projection_finish = std::chrono::high_resolution_clock::now();

@@ -40,6 +40,7 @@ IndexRetriever::IndexRetriever(std::string db_name) : db_name_(db_name) {
     db_index_path_ = "./DB_DATA_ARCHIVE/" + db_name_ + "/index/";
 
     dict_ = Dictionary(db_dictionary_path_);
+
     std::thread t([&] { dict_.Load(); });
 
     Init();
@@ -60,9 +61,9 @@ IndexRetriever::IndexRetriever(std::string db_name) : db_name_(db_name) {
     std::cout << "load db dictionary success. takes " << diff.count() << " ms." << std::endl;
 }
 
-uint IndexRetriever::FileSize(std::string file_name) {
+ulong IndexRetriever::FileSize(std::string file_name) {
     std::ifstream file(file_name, std::ios::binary | std::ios::ate);
-    uint size = static_cast<uint>(file.tellg());
+    ulong size = static_cast<ulong>(file.tellg());
     file.close();
     return size;
 }
@@ -78,18 +79,19 @@ void IndexRetriever::Init() {
     else
         predicate_index_arrays_no_compress_ = MMap<uint>(file_path, predicate_index_arrays_file_size_);
 
-    uint all_arr_size = dict_.triplet_cnt();
+    ulong all_arr_size = dict_.triplet_cnt();
     spo_.to_daa_ = MMap<uint>(db_index_path_ + "spo_to_daa", FileSize(db_index_path_ + "spo_to_daa"));
     spo_.daa_levels_ =
         MMap<uint>(db_index_path_ + "spo_daa_levels", FileSize(db_index_path_ + "spo_daa_levels"));
-    spo_.daa_level_end_ = MMap<char>(db_index_path_ + "spo_daa_level_end", (all_arr_size + 7) / 8);
-    spo_.daa_array_end_ = MMap<char>(db_index_path_ + "spo_daa_array_end", (all_arr_size + 7) / 8);
+    ulong file_size = ulong(all_arr_size + 7ul) / 8ul;
+    spo_.daa_level_end_ = MMap<char>(db_index_path_ + "spo_daa_level_end", file_size);
+    spo_.daa_array_end_ = MMap<char>(db_index_path_ + "spo_daa_array_end", file_size);
 
     ops_.to_daa_ = MMap<uint>(db_index_path_ + "ops_to_daa", FileSize(db_index_path_ + "ops_to_daa"));
     ops_.daa_levels_ =
         MMap<uint>(db_index_path_ + "ops_daa_levels", FileSize(db_index_path_ + "ops_daa_levels"));
-    ops_.daa_level_end_ = MMap<char>(db_index_path_ + "ops_daa_level_end", (all_arr_size + 7) / 8);
-    ops_.daa_array_end_ = MMap<char>(db_index_path_ + "ops_daa_array_end", (all_arr_size + 7) / 8);
+    ops_.daa_level_end_ = MMap<char>(db_index_path_ + "ops_daa_level_end", file_size);
+    ops_.daa_array_end_ = MMap<char>(db_index_path_ + "ops_daa_array_end", file_size);
 
     if (to_daa_compressed_ || levels_compressed_) {
         MMap<uint> data_width = MMap<uint>(db_index_path_ + "data_width", 6 * 4);
@@ -105,7 +107,8 @@ void IndexRetriever::Init() {
 
 void IndexRetriever::LoadAndDecompress(std::vector<std::vector<uint>>& predicate_sets, std::string filename) {
     // 读取压缩后的数据长度
-    uint total_length, compressed_length;
+    ulong total_length;
+    uint compressed_length;
     uint8_t* compressed_buffer;
     std::ifstream infile(filename, std::ios::binary);
     infile.read(reinterpret_cast<char*>(&total_length), sizeof(total_length));
@@ -161,11 +164,11 @@ uint IndexRetriever::AccessBitSequence(MMap<uint>& bits, uint data_width, ulong 
     return data;
 }
 
-uint IndexRetriever::AccessToDAA(DAA& daa, uint offset) {
+uint IndexRetriever::AccessToDAA(DAA& daa, ulong offset) {
     if (to_daa_compressed_) {
         uint data_width = (offset % 2) ? daa.daa_offset_width_ : daa.chara_set_id_width_;
 
-        ulong bit_start = (offset / 2) * (daa.chara_set_id_width_ + daa.daa_offset_width_) +
+        ulong bit_start = ulong(offset / 2) * ulong(daa.chara_set_id_width_ + daa.daa_offset_width_) +
                           ((offset % 2) ? daa.chara_set_id_width_ : 0);
 
         return AccessBitSequence(daa.to_daa_, data_width, bit_start);
@@ -174,11 +177,11 @@ uint IndexRetriever::AccessToDAA(DAA& daa, uint offset) {
     }
 }
 
-uint IndexRetriever::AccessLevels(uint offset, Order order) {
+uint IndexRetriever::AccessLevels(ulong offset, Order order) {
     MMap<uint>& levels = (order == Order::kSPO) ? spo_.daa_levels_ : ops_.daa_levels_;
     if (levels_compressed_) {
         uint data_width = (order == Order::kSPO) ? spo_.daa_levels_width_ : ops_.daa_levels_width_;
-        uint bit_start = offset * data_width;
+        ulong bit_start = offset * ulong(data_width);
 
         return AccessBitSequence(levels, data_width, bit_start);
     } else {

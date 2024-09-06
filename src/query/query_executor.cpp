@@ -332,7 +332,7 @@ bool QueryExecutor::SearchPredicatePath(Stat& stat, uint64_t entity) {
 void QueryExecutor::Query() {
     auto begin = std::chrono::high_resolution_clock::now();
     PreJoin();
-
+    
     for (;;) {
         if (stat_.at_end_) {
             if (stat_.level_ == 0) {

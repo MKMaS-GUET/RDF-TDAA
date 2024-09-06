@@ -21,15 +21,15 @@ enum Map { kSubjectMap, kPredicateMap, kObjectMap, kSharedMap };
 class Dictionary {
     class Loader {
         std::string dict_path_;
-        uint subject_cnt_;
-        uint object_cnt_;
-        uint shared_cnt_;
+        ulong subject_cnt_;
+        ulong object_cnt_;
+        ulong shared_cnt_;
 
         void SubLoadID2Node(std::vector<std::string>& id2node,
                             MMap<char>& node_file,
                             uint start_id,
-                            std::size_t start_offset,
-                            std::size_t end_offset);
+                            ulong start_offset,
+                            ulong end_offset);
 
        public:
         Loader(std::string dict_path, uint subject_cnt, uint object_cnt, uint shared_cnt);
@@ -44,11 +44,11 @@ class Dictionary {
     std::string dict_path_;
     uint max_threads = 6;
 
-    uint subject_cnt_;
-    uint predicate_cnt_;
-    uint object_cnt_;
-    uint shared_cnt_;
-    uint triplet_cnt_;
+    ulong subject_cnt_;
+    ulong predicate_cnt_;
+    ulong object_cnt_;
+    ulong shared_cnt_;
+    ulong triplet_cnt_;
 
     MMap<std::size_t> subject_hashes_;
     MMap<std::size_t> object_hashes_;

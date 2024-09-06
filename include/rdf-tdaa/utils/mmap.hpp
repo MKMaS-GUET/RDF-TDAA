@@ -1,39 +1,3 @@
-// #ifndef MMAP_HPP
-// #define MMAP_HPP
-
-// #include <fcntl.h>
-// #include <sys/mman.h>
-// #include <unistd.h>
-// #include <fstream>
-// #include <string>
-
-// template <typename T>
-// struct MMap {
-//    private:
-//     void Create(std::string path, uint size);
-
-//    public:
-//     T* map_;
-//     int fd_;
-//     std::string path_;
-//     uint size_;  // bytes
-//     uint offset_;
-
-//     MMap();
-
-//     MMap(std::string path);
-
-//     MMap(std::string path, uint size);
-
-//     void Write(T data);
-
-//     T& operator[](uint offset);
-
-//     void CloseMap();
-// };
-
-// #endif
-
 #ifndef MMAP_HPP
 #define MMAP_HPP
 
@@ -45,7 +9,7 @@
 template <typename T>
 struct MMap {
    private:
-    void Create(std::string path, uint size) {
+    void Create(std::string path, ulong size) {
         fd_ = open((path).c_str(), O_RDWR | O_CREAT, (mode_t)0600);
         if (size == 0) {
             close(fd_);
@@ -75,8 +39,8 @@ struct MMap {
     T* map_;
     int fd_;
     std::string path_;
-    uint size_;  // bytes
-    uint offset_;
+    ulong size_;  // bytes
+    ulong offset_;
 
     MMap() {}
 
@@ -86,13 +50,13 @@ struct MMap {
             perror("File not exist");
             exit(1);
         }
-        size_ = static_cast<uint>(file.tellg());
+        size_ = static_cast<ulong>(file.tellg());
         file.close();
 
         Create(path, size_);
     }
 
-    MMap(std::string path, uint size) : path_(path), size_(size), offset_(0) { Create(path, size); }
+    MMap(std::string path, ulong size) : path_(path), size_(size), offset_(0) { Create(path, size); }
 
     void Write(T data) {
         if (offset_ >= 0 && offset_ < size_ / sizeof(T)) {
@@ -101,7 +65,7 @@ struct MMap {
         }
     }
 
-    T& operator[](uint offset) {
+    T& operator[](ulong offset) {
         if (offset >= 0 && offset < size_ / sizeof(T)) {
             return map_[offset];
         }

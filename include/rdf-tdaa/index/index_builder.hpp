@@ -48,9 +48,14 @@ class IndexBuilder {
 
     void BuildPredicateIndex(std::vector<PredicateIndex>& predicate_indexes);
 
-    void SubBuildPredicateIndex(std::queue<uint>* task_queue,
-                                std::vector<PredicateIndex>* predicate_indexes,
-                                double* finished);
+    // void SubBuildPredicateIndex(std::queue<uint>* task_queue,
+    //                             std::vector<PredicateIndex>* predicate_indexes,
+    //                             double* finished);
+    void SubBuildPredicateIndex(std::deque<uint>* task_queue,
+                                std::mutex* task_queue_mutex,
+                                std::condition_variable* task_queue_cv,
+                                std::atomic<bool>* task_queue_empty,
+                                std::vector<PredicateIndex>* local_predicate_indexes);
 
     void StorePredicateIndexNoCompress(std::vector<PredicateIndex>& predicate_indexes);
 
@@ -58,7 +63,7 @@ class IndexBuilder {
 
     void BuildCharacteristicSet(std::vector<std::pair<uint, uint>>& to_set_id, Order order);
 
-    void CompressAndSave(uint* data, uint size, std::string filename);
+    void CompressAndSave(uint* data, ulong size, std::string filename);
 
     uint BuildEntitySets(std::vector<std::pair<uint, uint>>& to_set_id,
                          std::vector<std::vector<std::vector<uint>>>& entity_set,

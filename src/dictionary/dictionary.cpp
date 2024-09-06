@@ -6,12 +6,13 @@ Dictionary::Loader::Loader(std::string dict_path, uint subject_cnt, uint object_
 void Dictionary::Loader::SubLoadID2Node(std::vector<std::string>& id2node,
                                         MMap<char>& node_file,
                                         uint start_id,
-                                        std::size_t start_offset,
-                                        std::size_t end_offset) {
+                                        ulong start_offset,
+                                        ulong end_offset) {
     uint id = start_id;
     std::string node;
-    for (uint i = start_offset; i < end_offset; i++) {
-        char c = node_file[i];
+    ulong i = start_offset;
+    for (; i < end_offset; i++) {
+        char& c = node_file[i];
         if (c != '\n') {
             node.push_back(c);
         } else {
@@ -42,7 +43,7 @@ void Dictionary::Loader::LoadID2Node(std::vector<std::string>& id2subject_,
     MMap<char> subject_file = MMap<char>(dict_path_ + "/subjects/nodes");
     MMap<char> object_file = MMap<char>(dict_path_ + "/objects/nodes");
     MMap<char> shared_file = MMap<char>(dict_path_ + "/shared/nodes");
-    MMap<uint> menagement_data = MMap<uint>(dict_path_ + "/menagement_data");
+    MMap<ulong> menagement_data = MMap<ulong>(dict_path_ + "/menagement_data");
 
     std::array<std::pair<std::vector<std::string>*, MMap<char>*>, 3> pos;
     pos[0] = {&id2subject_, &subject_file};
@@ -54,12 +55,12 @@ void Dictionary::Loader::LoadID2Node(std::vector<std::string>& id2subject_,
     std::vector<std::thread> threads;
 
     for (uint i = 0; i < pos.size(); i++) {
-        uint base = 5 + max_threads * 2 * i;
+        ulong base = 5 + max_threads * 2 * i;
 
         for (uint t = 0; t < max_threads; t++) {
-            uint start_id = menagement_data[base++];
-            uint start_offset = menagement_data[base++];
-            uint end_offset = (t != max_threads - 1) ? menagement_data[base + 1] : pos[i].second->size_;
+            ulong start_id = menagement_data[base++];
+            ulong start_offset = menagement_data[base++];
+            ulong end_offset = (t != max_threads - 1) ? menagement_data[base + 1] : pos[i].second->size_;
 
             threads.emplace_back(std::bind(&Dictionary::Loader::SubLoadID2Node, this, std::ref(*pos[i].first),
                                            std::ref(*pos[i].second), start_id, start_offset, end_offset));
@@ -83,7 +84,7 @@ Dictionary::Dictionary(std::string& dict_path_) : dict_path_(dict_path_) {
 }
 
 void Dictionary::InitLoad() {
-    MMap<uint> menagement_data = MMap<uint>(dict_path_ + "/menagement_data");
+    MMap<ulong> menagement_data = MMap<ulong>(dict_path_ + "/menagement_data");
 
     subject_cnt_ = menagement_data[0];
     id2subject_ = std::vector<std::string>(subject_cnt_ + 1);
