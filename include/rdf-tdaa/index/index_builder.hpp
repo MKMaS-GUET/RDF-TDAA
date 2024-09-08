@@ -35,6 +35,7 @@ class IndexBuilder {
     std::string db_index_path_;
     std::string db_dictionary_path_;
     std::string db_name_;
+    ulong all_arr_size_ = 0;
 
     bool compress_predicate_index_ = true;
     bool compress_to_daa_ = true;

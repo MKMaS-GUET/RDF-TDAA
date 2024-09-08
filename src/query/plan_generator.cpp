@@ -80,6 +80,7 @@ void PlanGenerator::Generate(const std::shared_ptr<IndexRetriever>& index,
     AdjacencyList query_graph_ud;
     hash_map<std::string, uint> est_size;
     hash_map<std::string, uint> univariates;
+    std::vector<std::string> plan;
 
     for (size_t i = 0; i < triple_list.size(); ++i) {
         const auto& triple = triple_list[i];
@@ -157,6 +158,13 @@ void PlanGenerator::Generate(const std::shared_ptr<IndexRetriever>& index,
     std::transform(query_graph_ud.begin(), query_graph_ud.end(), variable_priority.begin(),
                    [](const auto& pair) { return pair.first; });
 
+    if (variable_priority.size() == 0 && univariates.size() == 1) {
+        plan.push_back(univariates.begin()->first);
+        std::cout << univariates.begin()->first << std::endl;
+        GenPlanTable(index, triple_list, plan);
+        return;
+    }
+
     std::sort(variable_priority.begin(), variable_priority.end(), [&](const auto& var1, const auto& var2) {
         if (query_graph_ud[var1].size() + univariates[var1] !=
             query_graph_ud[var2].size() + univariates[var2]) {
@@ -206,8 +214,6 @@ void PlanGenerator::Generate(const std::shared_ptr<IndexRetriever>& index,
             allPaths.push_back(path);
         }
     }
-
-    std::vector<std::string> plan;
 
     if (!(one_degree_variables.size() == query_graph_ud.size() - 1) &&  // 非star
         ((one_degree_variables.size() == 2 &&

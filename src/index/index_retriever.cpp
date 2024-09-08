@@ -69,29 +69,23 @@ ulong IndexRetriever::FileSize(std::string file_name) {
 }
 
 void IndexRetriever::Init() {
-    std::string file_path = db_index_path_ + "predicate_index";
-    predicate_index_ = MMap<uint>(file_path, FileSize(file_path));
+    predicate_index_ = MMap<uint>(db_index_path_ + "predicate_index");
 
-    file_path = db_index_path_ + "predicate_index_arrays";
-    predicate_index_arrays_file_size_ = FileSize(file_path);
+    std::string file_path = db_index_path_ + "predicate_index_arrays";
     if (predicate_index_compressed_)
-        predicate_index_arrays_ = MMap<uint8_t>(file_path, predicate_index_arrays_file_size_);
+        predicate_index_arrays_ = MMap<uint8_t>(file_path);
     else
-        predicate_index_arrays_no_compress_ = MMap<uint>(file_path, predicate_index_arrays_file_size_);
+        predicate_index_arrays_no_compress_ = MMap<uint>(file_path);
 
-    ulong all_arr_size = dict_.triplet_cnt();
-    spo_.to_daa_ = MMap<uint>(db_index_path_ + "spo_to_daa", FileSize(db_index_path_ + "spo_to_daa"));
-    spo_.daa_levels_ =
-        MMap<uint>(db_index_path_ + "spo_daa_levels", FileSize(db_index_path_ + "spo_daa_levels"));
-    ulong file_size = ulong(all_arr_size + 7ul) / 8ul;
-    spo_.daa_level_end_ = MMap<char>(db_index_path_ + "spo_daa_level_end", file_size);
-    spo_.daa_array_end_ = MMap<char>(db_index_path_ + "spo_daa_array_end", file_size);
+    spo_.to_daa_ = MMap<uint>(db_index_path_ + "spo_to_daa");
+    spo_.daa_levels_ = MMap<uint>(db_index_path_ + "spo_daa_levels");
+    spo_.daa_level_end_ = MMap<char>(db_index_path_ + "spo_daa_level_end");
+    spo_.daa_array_end_ = MMap<char>(db_index_path_ + "spo_daa_array_end");
 
-    ops_.to_daa_ = MMap<uint>(db_index_path_ + "ops_to_daa", FileSize(db_index_path_ + "ops_to_daa"));
-    ops_.daa_levels_ =
-        MMap<uint>(db_index_path_ + "ops_daa_levels", FileSize(db_index_path_ + "ops_daa_levels"));
-    ops_.daa_level_end_ = MMap<char>(db_index_path_ + "ops_daa_level_end", file_size);
-    ops_.daa_array_end_ = MMap<char>(db_index_path_ + "ops_daa_array_end", file_size);
+    ops_.to_daa_ = MMap<uint>(db_index_path_ + "ops_to_daa");
+    ops_.daa_levels_ = MMap<uint>(db_index_path_ + "ops_daa_levels");
+    ops_.daa_level_end_ = MMap<char>(db_index_path_ + "ops_daa_level_end");
+    ops_.daa_array_end_ = MMap<char>(db_index_path_ + "ops_daa_array_end");
 
     if (to_daa_compressed_ || levels_compressed_) {
         MMap<uint> data_width = MMap<uint>(db_index_path_ + "data_width", 6 * 4);

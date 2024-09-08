@@ -146,11 +146,9 @@ void QueryExecutor::Down(Stat& stat) {
     // 并将这些实体添加到存储结果的 current_tuple_ 中
 
     bool success = UpdateCurrentTuple(stat);
-    // 不成功则继续
     while (!success && !stat.at_end_) {
         success = UpdateCurrentTuple(stat);
     }
-    // sleep(2);
 }
 
 void QueryExecutor::Up(Stat& stat) {
@@ -332,7 +330,7 @@ bool QueryExecutor::SearchPredicatePath(Stat& stat, uint64_t entity) {
 void QueryExecutor::Query() {
     auto begin = std::chrono::high_resolution_clock::now();
     PreJoin();
-    
+
     for (;;) {
         if (stat_.at_end_) {
             if (stat_.level_ == 0) {
@@ -355,7 +353,7 @@ void QueryExecutor::Query() {
     }
 
     auto end = std::chrono::high_resolution_clock::now();
-
+    
     query_duration_ = end - begin;
 }
 

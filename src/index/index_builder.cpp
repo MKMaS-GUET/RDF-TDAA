@@ -322,6 +322,7 @@ uint IndexBuilder::BuildEntitySets(std::vector<std::pair<uint, uint>>& to_set_id
         }
     }
 
+    ulong distinct_triple_cnt = 0;
     std::vector<uint>().swap(p_offset);
     uint max = 0;
     for (uint id = 1; id <= entity_cnt; id++) {
@@ -329,7 +330,7 @@ uint IndexBuilder::BuildEntitySets(std::vector<std::pair<uint, uint>>& to_set_id
             auto& set = entity_set[id - 1][p];
             std::sort(set.begin(), set.end());
             set.erase(std::unique(set.begin(), set.end()), set.end());
-
+            distinct_triple_cnt += set.size();
             if (set[0] > max)
                 max = set[0];
             uint last = 0;
@@ -341,15 +342,12 @@ uint IndexBuilder::BuildEntitySets(std::vector<std::pair<uint, uint>>& to_set_id
             }
         }
     }
-    // std::cout << max << std::endl;
+    if (all_arr_size_ == 0) {
+        all_arr_size_ = distinct_triple_cnt;
+        
+    } else if (all_arr_size_ != distinct_triple_cnt)
+        perror("error !!!");
     return std::ceil(std::log2(max));
-}
-
-void printBinary1(uint n) {
-    for (int i = sizeof(n) * 8 - 1; i >= 0; --i) {
-        std::cout << ((n >> i) & 1);
-    }
-    std::cout << std::endl;
 }
 
 void IndexBuilder::BuildAndSaveIndex(std::vector<std::pair<uint, uint>>& to_set_id,
@@ -360,20 +358,19 @@ void IndexBuilder::BuildAndSaveIndex(std::vector<std::pair<uint, uint>>& to_set_
     ulong entity_cnt = entity_set.size();
     std::string prefix = (order == Order::kSPO) ? "spo" : "ops";
 
-    ulong all_arr_size = dict_.triplet_cnt();
-
     MMap<uint> daa_levels;
     ulong file_size;
     if (compress_levels_)
-        file_size = ulong(all_arr_size * ulong(levels_width) + 7ul) / 8ul;
+        file_size = ulong(all_arr_size_ * ulong(levels_width) + 7ul) / 8ul;
     else
-        file_size = all_arr_size * 4;
+        file_size = all_arr_size_ * 4;
     daa_levels = MMap<uint>(db_index_path_ + prefix + "_daa_levels", file_size);
 
+    std::cout << all_arr_size_ << " " << ulong(all_arr_size_ + 7ul) / 8ul << std::endl;
     MMap<char> daa_level_end =
-        MMap<char>(db_index_path_ + prefix + "_daa_level_end", ulong(all_arr_size + 7ul) / 8ul);
+        MMap<char>(db_index_path_ + prefix + "_daa_level_end", ulong(all_arr_size_ + 7ul) / 8ul);
     MMap<char> daa_array_end =
-        MMap<char>(db_index_path_ + prefix + "_daa_array_end", ulong(all_arr_size + 7ul) / 8ul);
+        MMap<char>(db_index_path_ + prefix + "_daa_array_end", ulong(all_arr_size_ + 7ul) / 8ul);
 
     uint daa_file_offset = 0;
 

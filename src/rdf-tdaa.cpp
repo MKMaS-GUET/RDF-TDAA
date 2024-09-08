@@ -16,7 +16,6 @@ uint QueryResult(std::vector<std::vector<uint>>& result,
     // 而 result 的变量顺序是计划生成中的变量排序
     // 所以要获取每一个要输出的变量在 result 中的位置
     const auto variable_indexes = query_plan->MappingVariable(parser->ProjectVariables());
-
     for (uint i = 0; i < parser->ProjectVariables().size(); i++) {
         std::cout << parser->ProjectVariables()[i] << " ";
     }
@@ -93,7 +92,7 @@ void RDFTDAA::Query(const std::string& db_name, const std::string& data_file) {
             auto parser = std::make_shared<SPARQLParser>(sparql);
             auto query_plan = std::make_shared<PlanGenerator>(index, parser->TripleList());
             auto plan_end = std::chrono::high_resolution_clock::now();
-            
+
             auto executor = std::make_shared<QueryExecutor>(index, query_plan, parser->Limit());
             executor->Query();
 
