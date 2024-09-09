@@ -1,4 +1,5 @@
 #include "rdf-tdaa/index/index_builder.hpp"
+#include "rdf-tdaa/utils/vbyte.hpp"
 
 void IndexBuilder::PredicateIndex::Build(std::vector<std::pair<uint, uint>>& so_pairs) {
     for (const auto& so : so_pairs) {
@@ -266,24 +267,6 @@ void IndexBuilder::BuildCharacteristicSet(std::vector<std::pair<uint, uint>>& to
     trie.~PredicateSetTrie();
 }
 
-void IndexBuilder::CompressAndSave(uint* data, ulong size, std::string filename) {
-    uint max_compressed_length = streamvbyte_max_compressedbytes(size);
-    uint8_t* compressed_buffer = new uint8_t[max_compressed_length];
-
-    if (size > UINT_MAX)
-        std::cout << "error size: " << size << std::endl;
-    uint compressed_length = streamvbyte_encode(data, size, compressed_buffer);  // encoding
-
-    std::ofstream outfile(filename, std::ios::binary);
-
-    outfile.write(reinterpret_cast<const char*>(&size), sizeof(size));
-    outfile.write(reinterpret_cast<const char*>(&compressed_length), sizeof(compressed_length));
-    outfile.write(reinterpret_cast<const char*>(compressed_buffer), compressed_length);
-    outfile.close();
-
-    delete[] compressed_buffer;
-}
-
 uint IndexBuilder::BuildEntitySets(std::vector<std::pair<uint, uint>>& to_set_id,
                                    std::vector<std::vector<std::vector<uint>>>& entity_set,
                                    Order order) {
@@ -344,7 +327,6 @@ uint IndexBuilder::BuildEntitySets(std::vector<std::pair<uint, uint>>& to_set_id
     }
     if (all_arr_size_ == 0) {
         all_arr_size_ = distinct_triple_cnt;
-        
     } else if (all_arr_size_ != distinct_triple_cnt)
         perror("error !!!");
     return std::ceil(std::log2(max));
@@ -366,7 +348,6 @@ void IndexBuilder::BuildAndSaveIndex(std::vector<std::pair<uint, uint>>& to_set_
         file_size = all_arr_size_ * 4;
     daa_levels = MMap<uint>(db_index_path_ + prefix + "_daa_levels", file_size);
 
-    std::cout << all_arr_size_ << " " << ulong(all_arr_size_ + 7ul) / 8ul << std::endl;
     MMap<char> daa_level_end =
         MMap<char>(db_index_path_ + prefix + "_daa_level_end", ulong(all_arr_size_ + 7ul) / 8ul);
     MMap<char> daa_array_end =
@@ -437,7 +418,7 @@ void IndexBuilder::BuildAndSaveIndex(std::vector<std::pair<uint, uint>>& to_set_
     uint daa_offset_width;
     if (compress_to_daa_ || compress_levels_) {
         chara_set_id_width = std::ceil(std::log2(max_characteristic_set_id));
-        daa_offset_width = std::ceil(std::log2(dict_.triplet_cnt()));
+        daa_offset_width = std::ceil(std::log2(all_arr_size_));
 
         MMap<uint> data_width = MMap<uint>(db_index_path_ + "data_width", 6 * 4);
         data_width[(order == Order::kSPO) ? 0 : 3] = chara_set_id_width;

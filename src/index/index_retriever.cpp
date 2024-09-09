@@ -1,4 +1,5 @@
 #include "rdf-tdaa/index/index_retriever.hpp"
+#include "rdf-tdaa/utils/vbyte.hpp"
 
 One::One(MMap<char>& bits, uint begin, uint end) : bits_(bits), bit_offset_(begin), end_(end) {}
 
@@ -41,7 +42,12 @@ IndexRetriever::IndexRetriever(std::string db_name) : db_name_(db_name) {
 
     dict_ = Dictionary(db_dictionary_path_);
 
-    std::thread t([&] { dict_.Load(); });
+    for (uint id = 1; id <= dict_.shared_cnt(); id++)
+        dict_.ID2String(id, Pos::kShared);
+    for (uint id = 1; id <= dict_.subject_cnt(); id++)
+        dict_.ID2String(dict_.shared_cnt() + id, Pos::kSubject);
+    for (uint id = 1; id <= dict_.object_cnt(); id++)
+        dict_.ID2String(dict_.shared_cnt() + dict_.object_cnt() + id, Pos::kObject);
 
     Init();
     ps_sets_ = std::vector<std::shared_ptr<Result>>(dict_.predicate_cnt());
@@ -51,10 +57,8 @@ IndexRetriever::IndexRetriever(std::string db_name) : db_name_(db_name) {
     for (auto& set : po_sets_)
         set = std::make_shared<Result>();
 
-    LoadAndDecompress(subject_characteristic_set_, db_index_path_ + "s_c_sets");
-    LoadAndDecompress(object_characteristic_set_, db_index_path_ + "o_c_sets");
-
-    t.join();
+    LoadCharacteristicSet(subject_characteristic_set_, db_index_path_ + "s_c_sets");
+    LoadCharacteristicSet(object_characteristic_set_, db_index_path_ + "o_c_sets");
 
     auto end = std::chrono::high_resolution_clock::now();
     std::chrono::duration<double, std::milli> diff = end - beg;
@@ -99,20 +103,10 @@ void IndexRetriever::Init() {
     }
 }
 
-void IndexRetriever::LoadAndDecompress(std::vector<std::vector<uint>>& predicate_sets, std::string filename) {
+void IndexRetriever::LoadCharacteristicSet(std::vector<std::vector<uint>>& characteristic_sets,
+                                           std::string filename) {
     // 读取压缩后的数据长度
-    ulong total_length;
-    uint compressed_length;
-    uint8_t* compressed_buffer;
-    std::ifstream infile(filename, std::ios::binary);
-    infile.read(reinterpret_cast<char*>(&total_length), sizeof(total_length));
-    infile.read(reinterpret_cast<char*>(&compressed_length), sizeof(compressed_length));
-    compressed_buffer = new uint8_t[compressed_length];
-    infile.read(reinterpret_cast<char*>(compressed_buffer), compressed_length);
-    infile.close();
-
-    uint32_t* recovdata = new uint32_t[total_length];
-    streamvbyte_decode(compressed_buffer, recovdata, total_length);
+    auto [recovdata, total_length] = LoadAndDecompress(filename);
 
     std::vector<uint> p_set;
     uint value;
@@ -122,13 +116,12 @@ void IndexRetriever::LoadAndDecompress(std::vector<std::vector<uint>>& predicate
             p_set.push_back(recovdata[offset]);
         } else {
             p_set.shrink_to_fit();
-            predicate_sets.push_back(p_set);
+            characteristic_sets.push_back(p_set);
             p_set.clear();
         }
     }
-    predicate_sets.shrink_to_fit();
+    characteristic_sets.shrink_to_fit();
 
-    delete[] compressed_buffer;
     delete[] recovdata;
 }
 
@@ -237,16 +230,12 @@ void IndexRetriever::Close() {
     dict_.Close();
 }
 
-const std::string& IndexRetriever::ID2String(uint id, Pos pos) {
+const char* IndexRetriever::ID2String(uint id, Pos pos) {
     return dict_.ID2String(id, pos);
 }
 
 uint IndexRetriever::String2ID(const std::string& str, Pos pos) {
     return dict_.String2ID(str, pos);
-}
-
-uint IndexRetriever::triplet_cnt() {
-    return dict_.triplet_cnt();
 }
 
 uint IndexRetriever::predicate_cnt() {

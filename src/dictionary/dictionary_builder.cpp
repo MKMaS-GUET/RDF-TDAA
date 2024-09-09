@@ -1,4 +1,5 @@
 #include "rdf-tdaa/dictionary/dictionary_builder.hpp"
+#include "rdf-tdaa/utils/vbyte.hpp"
 
 DictionaryBuilder::DictionaryBuilder(std::string& dict_path, std::string& file_path)
     : dict_path_(dict_path), file_path_(file_path) {}
@@ -73,13 +74,13 @@ void DictionaryBuilder::BuildDict() {
 
         predicates_.insert({p, predicates_.size() + 1});
 
-        ++triplet_cnt_;
+        ++triplet_loaded_;
 
-        if (triplet_cnt_ % 100000 == 0) {
-            std::cout << triplet_cnt_ << " triples processed\r" << std::flush;
+        if (triplet_loaded_ % 100000 == 0) {
+            std::cout << triplet_loaded_ << " triples processed\r" << std::flush;
         }
     }
-    std::cout << triplet_cnt_ << std::endl;
+    std::cout << triplet_loaded_ << std::endl;
     malloc_trim(0);
 
     fin.close();
@@ -87,29 +88,20 @@ void DictionaryBuilder::BuildDict() {
 
 void DictionaryBuilder::ReassignIDAndSave(hash_map<std::string, uint>& map,
                                           std::ofstream& dict_out,
-                                          std::string hashmap_path,
-                                          uint menagement_file_offset,
-                                          uint max_threads) {
+                                          std::string nodes_path,
+                                          uint menagement_file_offset) {
     // hash -> (id, p_str)
     phmap::btree_map<std::size_t, std::pair<uint, const std::string*>> hash2id;
     phmap::flat_hash_map<uint, std::vector<std::string>> conflicts;
-    uint nodes_per_thread = (map.size()) ? map.size() / max_threads : 0;
-    ulong offset = 0;
     ulong size = 0;
+    ulong str_len = 0;
     ulong id = 1;
-    ulong cnt = 0;
     for (auto it = map.begin(); it != map.end(); it++) {
         it->second = id;
-        size = it->first.size() + 1;
-        dict_out.write((it->first + "\n").c_str(), size);
-
-        if (nodes_per_thread && (id - 1) % nodes_per_thread == 0 && cnt < max_threads) {
-            menagement_data_[menagement_file_offset++] = id;
-            menagement_data_[menagement_file_offset++] = offset;
-            cnt++;
-        }
+        str_len = it->first.size() + 1;
+        dict_out.write((it->first + "\n").c_str(), str_len);
         id++;
-        offset += size;
+        size += str_len;
 
         std::size_t hash = std::hash<std::string>{}(it->first);
         auto ret = hash2id.insert({hash, {it->second, &it->first}});
@@ -122,13 +114,41 @@ void DictionaryBuilder::ReassignIDAndSave(hash_map<std::string, uint>& map,
                 conflicts[hash].push_back(it->first);
         }
     }
+
+    uint* id2offset;
+    uint id2offset_size;
+    if (size < UINT_MAX) {
+        id2offset_size = map.size();
+        menagement_data_[menagement_file_offset] = 32;
+    } else {
+        id2offset_size = map.size() * 2;
+        menagement_data_[menagement_file_offset] = 64;
+    }
+
+    id2offset = new uint[id2offset_size];
+
+    ulong end_offset = 0;
+    ulong i = 0;
+    for (auto it = map.begin(); it != map.end(); it++) {
+        end_offset += it->first.size() + 1;
+        if (size < UINT_MAX) {
+            // std::cout << i << " " << end_offset << std::endl;
+            id2offset[i++] = end_offset;
+        } else {
+            id2offset[i++] = end_offset >> 32;
+            id2offset[i++] = end_offset;
+        }
+    }
+
+    CompressAndSave(id2offset, id2offset_size, nodes_path + "id2offset");
+
     ulong file_size = (sizeof(std::size_t) + 4) * hash2id.size();
-    MMap<std::size_t> hashes = MMap<std::size_t>(hashmap_path, file_size);
+    MMap<std::size_t> hashes = MMap<std::size_t>(nodes_path + "hash2id", file_size);
     for (auto it = hash2id.begin(); it != hash2id.end(); it++)
         hashes.Write(it->first);
     hashes.CloseMap();
 
-    MMap<uint> ids = MMap<uint>(hashmap_path, file_size);
+    MMap<uint> ids = MMap<uint>(nodes_path + "hash2id", file_size);
     ids.offset_ = hash2id.size() * 2;
     for (auto it = hash2id.begin(); it != hash2id.end(); it++)
         ids.Write(it->second.first);
@@ -156,17 +176,9 @@ void DictionaryBuilder::SaveDict(uint max_threads) {
     object_out.tie(nullptr);
     shared_out.tie(nullptr);
 
-    std::thread t1([&]() {
-        ReassignIDAndSave(subjects_, subject_out, dict_path_ + "/subjects/hash2id", 5, max_threads);
-    });
-    std::thread t2([&]() {
-        ReassignIDAndSave(objects_, object_out, dict_path_ + "/objects/hash2id", 5 + max_threads * 2,
-                          max_threads);
-    });
-    std::thread t3([&]() {
-        ReassignIDAndSave(shared_, shared_out, dict_path_ + "/shared/hash2id", 5 + max_threads * 2 * 2,
-                          max_threads);
-    });
+    std::thread t1([&]() { ReassignIDAndSave(subjects_, subject_out, dict_path_ + "/subjects/", 4); });
+    std::thread t2([&]() { ReassignIDAndSave(objects_, object_out, dict_path_ + "/objects/", 5); });
+    std::thread t3([&]() { ReassignIDAndSave(shared_, shared_out, dict_path_ + "/shared/", 6); });
     t1.join();
     t2.join();
     t3.join();
@@ -190,7 +202,7 @@ void DictionaryBuilder::Build() {
 
     uint max_threads = 6;
 
-    menagement_data_ = MMap<ulong>(dict_path_ + "/menagement_data", (5 + (2 * max_threads * 3)) * 8);
+    menagement_data_ = MMap<ulong>(dict_path_ + "/menagement_data", 7 * 8);
 
     Init();
 
@@ -204,7 +216,6 @@ void DictionaryBuilder::Build() {
     menagement_data_[1] = predicates_.size();
     menagement_data_[2] = objects_.size();
     menagement_data_[3] = shared_.size();
-    menagement_data_[4] = triplet_cnt_;
 
     beg = std::chrono::high_resolution_clock::now();
     SaveDict(max_threads);

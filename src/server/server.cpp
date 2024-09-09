@@ -62,7 +62,7 @@ void Endpoint::query(const httplib::Request& req, httplib::Response& res) {
                 writer.StartArray();
                 for (uint i = 0; i < variable_indexes.size(); i++) {
                     auto& idx = variable_indexes[i];
-                    writer.String(db_index->ID2String(item[idx.first], idx.second).c_str());
+                    writer.String(db_index->ID2String(item[idx.first], idx.second));
                 }
                 writer.EndArray();
             }

@@ -14,7 +14,7 @@ using hash_map = phmap::flat_hash_map<Key, Value>;
 class DictionaryBuilder {
     std::string dict_path_;
     std::string file_path_;
-    ulong triplet_cnt_ = 0;
+    ulong triplet_loaded_ = 0;
     MMap<ulong> menagement_data_;
 
     hash_map<std::string, uint> subjects_;
@@ -29,8 +29,7 @@ class DictionaryBuilder {
     void ReassignIDAndSave(hash_map<std::string, uint>& map,
                            std::ofstream& dict_out,
                            std::string hashmap_path,
-                           uint menagement_file_offset,
-                           uint max_threads);
+                           uint menagement_file_offset);
 
     void SaveDict(uint max_threads);
 

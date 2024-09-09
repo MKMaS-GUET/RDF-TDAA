@@ -67,7 +67,7 @@ class IndexRetriever {
 
     void Init();
 
-    void LoadAndDecompress(std::vector<std::vector<uint>>& predicate_sets, std::string filename);
+    void LoadCharacteristicSet(std::vector<std::vector<uint>>& characteristic_sets, std::string filename);
 
     uint AccessBitSequence(MMap<uint>& bits, uint data_width, ulong bit_start);
 
@@ -84,11 +84,9 @@ class IndexRetriever {
 
     void Close();
 
-    const std::string& ID2String(uint id, Pos pos);
+    const char* ID2String(uint id, Pos pos);
 
     uint String2ID(const std::string& str, Pos pos);
-
-    uint triplet_cnt();
 
     uint predicate_cnt();
 

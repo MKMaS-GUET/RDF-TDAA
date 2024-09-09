@@ -64,8 +64,6 @@ class IndexBuilder {
 
     void BuildCharacteristicSet(std::vector<std::pair<uint, uint>>& to_set_id, Order order);
 
-    void CompressAndSave(uint* data, ulong size, std::string filename);
-
     uint BuildEntitySets(std::vector<std::pair<uint, uint>>& to_set_id,
                          std::vector<std::vector<std::vector<uint>>>& entity_set,
                          Order order);

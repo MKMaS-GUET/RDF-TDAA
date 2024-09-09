@@ -1,30 +1,8 @@
 #include "rdf-tdaa/dictionary/dictionary.hpp"
+#include "rdf-tdaa/utils/vbyte.hpp"
 
-Dictionary::Loader::Loader(std::string dict_path, uint subject_cnt, uint object_cnt, uint shared_cnt)
-    : dict_path_(dict_path), subject_cnt_(subject_cnt), object_cnt_(object_cnt), shared_cnt_(shared_cnt) {}
-
-void Dictionary::Loader::SubLoadID2Node(std::vector<std::string>& id2node,
-                                        MMap<char>& node_file,
-                                        uint start_id,
-                                        ulong start_offset,
-                                        ulong end_offset) {
-    uint id = start_id;
-    std::string node;
-    ulong i = start_offset;
-    for (; i < end_offset; i++) {
-        char& c = node_file[i];
-        if (c != '\n') {
-            node.push_back(c);
-        } else {
-            id2node[id] = node;
-            id++;
-            node.clear();
-        }
-    }
-}
-
-bool Dictionary::Loader::LoadPredicate(std::vector<std::string>& id2predicate,
-                                       hash_map<std::string, uint>& predicate2id) {
+bool Dictionary::LoadPredicate(std::vector<std::string>& id2predicate,
+                               hash_map<std::string, uint>& predicate2id) {
     std::ifstream predicate_in(dict_path_ + "/predicates", std::ofstream::out | std::ofstream::binary);
     std::string predicate;
     uint id = 1;
@@ -37,71 +15,9 @@ bool Dictionary::Loader::LoadPredicate(std::vector<std::string>& id2predicate,
     return true;
 }
 
-void Dictionary::Loader::LoadID2Node(std::vector<std::string>& id2subject_,
-                                     std::vector<std::string>& id2object_,
-                                     std::vector<std::string>& id2shared_) {
-    MMap<char> subject_file = MMap<char>(dict_path_ + "/subjects/nodes");
-    MMap<char> object_file = MMap<char>(dict_path_ + "/objects/nodes");
-    MMap<char> shared_file = MMap<char>(dict_path_ + "/shared/nodes");
-    MMap<ulong> menagement_data = MMap<ulong>(dict_path_ + "/menagement_data");
-
-    std::array<std::pair<std::vector<std::string>*, MMap<char>*>, 3> pos;
-    pos[0] = {&id2subject_, &subject_file};
-    pos[1] = {&id2object_, &object_file};
-    pos[2] = {&id2shared_, &shared_file};
-
-    uint max_threads = 6;
-
-    std::vector<std::thread> threads;
-
-    for (uint i = 0; i < pos.size(); i++) {
-        ulong base = 5 + max_threads * 2 * i;
-
-        for (uint t = 0; t < max_threads; t++) {
-            ulong start_id = menagement_data[base++];
-            ulong start_offset = menagement_data[base++];
-            ulong end_offset = (t != max_threads - 1) ? menagement_data[base + 1] : pos[i].second->size_;
-
-            threads.emplace_back(std::bind(&Dictionary::Loader::SubLoadID2Node, this, std::ref(*pos[i].first),
-                                           std::ref(*pos[i].second), start_id, start_offset, end_offset));
-        }
-
-        for (auto& thread : threads)
-            thread.join();
-        threads.clear();
-    }
-
-    subject_file.CloseMap();
-    object_file.CloseMap();
-    shared_file.CloseMap();
-    menagement_data.CloseMap();
-}
-
 Dictionary::Dictionary() {}
 
-Dictionary::Dictionary(std::string& dict_path_) : dict_path_(dict_path_) {
-    InitLoad();
-}
-
-void Dictionary::InitLoad() {
-    MMap<ulong> menagement_data = MMap<ulong>(dict_path_ + "/menagement_data");
-
-    subject_cnt_ = menagement_data[0];
-    id2subject_ = std::vector<std::string>(subject_cnt_ + 1);
-
-    predicate_cnt_ = menagement_data[1];
-    id2predicate_ = std::vector<std::string>(predicate_cnt_ + 1);
-
-    object_cnt_ = menagement_data[2];
-    id2object_ = std::vector<std::string>(object_cnt_ + 1);
-
-    shared_cnt_ = menagement_data[3];
-    id2shared_ = std::vector<std::string>(shared_cnt_ + 1);
-
-    triplet_cnt_ = menagement_data[4];
-
-    menagement_data.CloseMap();
-
+Dictionary::Dictionary(std::string& dict_path) : dict_path_(dict_path) {
     std::string file_path = dict_path_ + "/subjects/hash2id";
     subject_hashes_ = MMap<std::size_t>(file_path);
     subject_ids_ = MMap<uint>(file_path);
@@ -111,6 +27,33 @@ void Dictionary::InitLoad() {
     file_path = dict_path_ + "/shared/hash2id";
     shared_hashes_ = MMap<std::size_t>(file_path);
     shared_ids_ = MMap<uint>(file_path);
+
+    MMap<ulong> menagement_data = MMap<ulong>(dict_path_ + "/menagement_data");
+
+    subject_cnt_ = menagement_data[0];
+    predicate_cnt_ = menagement_data[1];
+    object_cnt_ = menagement_data[2];
+    shared_cnt_ = menagement_data[3];
+
+    id2predicate_ = std::vector<std::string>(predicate_cnt_ + 1);
+    LoadPredicate(id2predicate_, predicate2id_);
+
+    if (menagement_data[4] == 32)
+        id2subject_ = std::move(Node<uint>(dict_path_ + "/subjects/"));
+    else
+        id2subject_ = std::move(Node<ulong>(dict_path_ + "/subjects/"));
+
+    if (menagement_data[5] == 32)
+        id2object_ = std::move(Node<uint>(dict_path_ + "/objects/"));
+    else
+        id2object_ = std::move(Node<ulong>(dict_path_ + "/objects/"));
+
+    if (menagement_data[6] == 32)
+        id2shared_ = std::move(Node<uint>(dict_path_ + "/shared/"));
+    else
+        id2shared_ = std::move(Node<ulong>(dict_path_ + "/shared/"));
+
+    menagement_data.CloseMap();
 }
 
 long Dictionary::binarySearch(MMap<std::size_t> arr, long length, std::size_t target) {
@@ -177,50 +120,29 @@ uint Dictionary::FindInMaps(uint cnt, Map map, const std::string& str) {
 }
 
 void Dictionary::Close() {
-    std::thread t1([&]() {
-        std::vector<std::string>().swap(id2predicate_);
-        std::vector<std::string>().swap(id2subject_);
-        std::vector<std::string>().swap(id2object_);
-        std::vector<std::string>().swap(id2shared_);
-    });
-
-    std::thread t2([&]() {
-        hash_map<std::string, uint>().swap(predicate2id_);
-        subject_hashes_.CloseMap();
-        object_hashes_.CloseMap();
-        shared_hashes_.CloseMap();
-        subject_ids_.CloseMap();
-        object_ids_.CloseMap();
-        shared_ids_.CloseMap();
-    });
-
-    t1.join();
-    t2.join();
+    hash_map<std::string, uint>().swap(predicate2id_);
+    subject_hashes_.CloseMap();
+    object_hashes_.CloseMap();
+    shared_hashes_.CloseMap();
+    subject_ids_.CloseMap();
+    object_ids_.CloseMap();
+    shared_ids_.CloseMap();
 }
 
-void Dictionary::Load() {
-    std::ios::sync_with_stdio(false);
-
-    Loader loader(dict_path_, subject_cnt_, object_cnt_, shared_cnt_);
-
-    loader.LoadPredicate(id2predicate_, predicate2id_);
-    loader.LoadID2Node(id2subject_, id2object_, id2shared_);
-}
-
-std::string& Dictionary::ID2String(uint id, Pos pos) {
+const char* Dictionary::ID2String(uint id, Pos pos) {
     if (pos == kPredicate) {
-        return id2predicate_[id];
+        return id2predicate_[id].c_str();
     }
 
     if (id <= shared_cnt_) {
-        return id2shared_[id];
+        return std::get<Node<uint>>(id2shared_)[id];
     }
 
     switch (pos) {
         case kSubject:
-            return id2subject_[id - shared_cnt_];
+            return std::get<Node<uint>>(id2subject_)[id - shared_cnt_];
         case kObject:
-            return id2object_[id - shared_cnt_ - subject_cnt_];
+            return std::get<Node<uint>>(id2object_)[id - shared_cnt_ - subject_cnt_];
         default:
             break;
     }
@@ -256,10 +178,6 @@ uint Dictionary::object_cnt() {
 
 uint Dictionary::shared_cnt() {
     return shared_cnt_;
-}
-
-uint Dictionary::triplet_cnt() {
-    return triplet_cnt_;
 }
 
 uint Dictionary::max_id() {
