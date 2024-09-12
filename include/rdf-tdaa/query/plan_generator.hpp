@@ -2,10 +2,10 @@
 #define PLAN_GENERATOR_HPP
 
 // #include <parallel_hashmap/phmap.h>
-#include <unordered_map>
 #include <climits>
 #include <numeric>  // 包含 accumulate 函数
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 #include "rdf-tdaa/index/index_retriever.hpp"
@@ -33,14 +33,13 @@ class PlanGenerator {
     };
 
    private:
-    bool debug_ = false;
-
     std::vector<std::vector<Item>> query_plan_;
     // v -> (priority, pos)
     hash_map<std::string, std::pair<uint, Pos>> variable_metadata_;
     std::vector<std::vector<size_t>> other_type_;
     std::vector<std::vector<size_t>> none_type_;
     std::vector<std::vector<std::shared_ptr<Result>>> prestores_;
+    bool zero_result_ = false;
 
    public:
     PlanGenerator(const std::shared_ptr<IndexRetriever>& index,
@@ -70,6 +69,7 @@ class PlanGenerator {
     std::vector<std::vector<size_t>>& other_type();
     std::vector<std::vector<size_t>>& none_type();
     std::vector<std::vector<std::shared_ptr<Result>>>& prestores();
+    bool zero_result();
 };
 
 #endif  // COMBINED_CODE_INDEX_GEN_PLAN_HPP

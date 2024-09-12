@@ -9,11 +9,10 @@
 class ResultList {
    public:
     class Result {
+       public:
         uint* start_;
         uint size_;
 
-       public:
-        int id = -1;
         Result();
 
         Result(uint* start, uint size);

@@ -37,15 +37,16 @@ class Dictionary {
             } else if (sizeof(T) == 8) {
                 offsets_ = new T[size_ / 2];
                 uint id = 0;
-                for (uint i = 0; i < size_; i++) {
+                for (ulong i = 0; i < size_; i++) {
                     if (i % 2 == 0) {
                         offsets_[id] = ulong(data[i]) << 32;
                     } else {
-                        offsets_[id] = data[i];
+                        offsets_[id] |= data[i];
                         id++;
                     }
                 }
                 size_ /= 2;
+                delete[] data;
             }
             node_file_ = MMap<char>(node_path + "/nodes");
         }

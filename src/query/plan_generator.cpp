@@ -77,6 +77,8 @@ std::vector<std::vector<std::string>> PlanGenerator::FindAllPathsInGraph(const A
 
 void PlanGenerator::Generate(const std::shared_ptr<IndexRetriever>& index,
                              const std::vector<std::vector<std::string>>& triple_list) {
+    bool debug = false;
+
     AdjacencyList query_graph_ud;
     hash_map<std::string, uint> est_size;
     hash_map<std::string, uint> univariates;
@@ -91,7 +93,7 @@ void PlanGenerator::Generate(const std::shared_ptr<IndexRetriever>& index,
         std::string vertex1;
         uint edge;
         std::string vertex2;
-        uint size;
+        uint size = 0;
 
         if (s[0] == '?' && o[0] == '?') {
             vertex1 = s;
@@ -99,13 +101,11 @@ void PlanGenerator::Generate(const std::shared_ptr<IndexRetriever>& index,
             vertex2 = o;
             // only support ?v predicate ?v
             size = index->GetSSetSize(edge);
-            if (est_size[s] == 0 || est_size[s] > size) {
+            if (est_size[s] == 0 || est_size[s] > size)
                 est_size[s] = size;
-            }
             size = index->GetOSetSize(edge);
-            if (est_size[o] == 0 || est_size[o] > size) {
+            if (est_size[o] == 0 || est_size[o] > size)
                 est_size[o] = size;
-            }
         } else if (s[0] == '?' && p[0] == '?') {
             vertex1 = s;
             edge = index->String2ID(o, Pos::kObject);
@@ -119,18 +119,21 @@ void PlanGenerator::Generate(const std::shared_ptr<IndexRetriever>& index,
                 univariates[s] += 1;
                 size = index->GetByOPSize(index->String2ID(o, Pos::kObject),
                                           index->String2ID(p, Pos::kPredicate));
-                if (est_size[s] == 0 || est_size[s] > size) {
+                if (est_size[s] == 0 || est_size[s] > size)
                     est_size[s] = size;
-                }
             }
             if (o[0] == '?') {
                 univariates[o] += 1;
                 size = index->GetBySPSize(index->String2ID(s, Pos::kSubject),
                                           index->String2ID(p, Pos::kPredicate));
-                if (est_size[s] == 0 || est_size[s] > size) {
+                if (est_size[s] == 0 || est_size[s] > size)
                     est_size[s] = size;
-                }
             }
+            if (size == 0) {
+                zero_result_ = true;
+                return;
+            }
+
             if (p[0] == '?')
                 univariates[p] += 1;
             continue;
@@ -140,7 +143,7 @@ void PlanGenerator::Generate(const std::shared_ptr<IndexRetriever>& index,
         query_graph_ud[vertex2].push_back({vertex1, edge});
     }
 
-    if (debug_) {
+    if (debug) {
         for (auto vertex_it = query_graph_ud.begin(); vertex_it != query_graph_ud.end(); vertex_it++) {
             std::cout << vertex_it->first << ": ";
             for (auto& edge : vertex_it->second) {
@@ -174,7 +177,7 @@ void PlanGenerator::Generate(const std::shared_ptr<IndexRetriever>& index,
         return est_size[var1] < est_size[var2];
     });
 
-    if (debug_) {
+    if (debug) {
         std::cout << "------------------------------" << std::endl;
         for (auto& v : variable_priority) {
             std::cout << v << ": " << est_size[v] << std::endl;
@@ -265,7 +268,7 @@ void PlanGenerator::Generate(const std::shared_ptr<IndexRetriever>& index,
             }
         }
 
-        if (debug_) {
+        if (debug) {
             std::cout << "longest_path: " << longest_path << std::endl;
             for (auto& path : allPaths) {
                 for (auto it = path.begin(); it != path.end(); it++) {
@@ -315,12 +318,13 @@ void PlanGenerator::Generate(const std::shared_ptr<IndexRetriever>& index,
         }
     }
 
-    if (debug_) {
+    if (debug) {
         std::cout << "variables order: " << std::endl;
         for (auto it = plan.begin(); it != plan.end(); it++) {
             std::cout << *it << " ";
         }
         std::cout << std::endl;
+        std::cout << "------------------------------" << std::endl;
     }
 
     GenPlanTable(index, triple_list, plan);
@@ -331,8 +335,6 @@ void PlanGenerator::GenPlanTable(const std::shared_ptr<IndexRetriever>& index,
                                  std::vector<std::string>& variables) {
     for (size_t i = 0; i < variables.size(); ++i) {
         variable_metadata_[variables[i]].first = i;
-        if (debug_)
-            std::cout << variables[i] << ": " << i << std::endl;
     }
 
     size_t n = variables.size();
@@ -340,8 +342,6 @@ void PlanGenerator::GenPlanTable(const std::shared_ptr<IndexRetriever>& index,
     prestores_.resize(n);
     other_type_.resize(n);
     none_type_.resize(n);
-
-    int range_cnt = 0;
 
     for (const auto& triple : triple_list) {
         const std::string& s = triple[0];
@@ -371,8 +371,7 @@ void PlanGenerator::GenPlanTable(const std::shared_ptr<IndexRetriever>& index,
                 // 下一步应该查询的变量的索引
                 item.candidate_result_idx_ = var_oid;
                 item.search_result_ = index->GetSSet(item.search_code_);
-                item.search_result_->id = range_cnt;
-                range_cnt += 1;
+
                 query_plan_[var_sid].push_back(item);
                 // 非 none 的 item 的索引
                 other_type_[var_sid].push_back(query_plan_[var_sid].size() - 1);
@@ -392,8 +391,7 @@ void PlanGenerator::GenPlanTable(const std::shared_ptr<IndexRetriever>& index,
                 item.search_type_ = Item::TypeT::kPS;
                 item.candidate_result_idx_ = var_sid;
                 item.search_result_ = index->GetOSet(item.search_code_);
-                item.search_result_->id = range_cnt;
-                range_cnt += 1;
+
                 query_plan_[var_oid].push_back(item);
                 other_type_[var_oid].push_back(query_plan_[var_oid].size() - 1);
 
@@ -412,9 +410,7 @@ void PlanGenerator::GenPlanTable(const std::shared_ptr<IndexRetriever>& index,
             uint oid = index->String2ID(o, Pos::kObject);
             uint pid = index->String2ID(p, Pos::kPredicate);
             std::shared_ptr<Result> r = index->GetByOP(oid, pid);
-            r->id = range_cnt;
             prestores_[var_sid].push_back(r);
-            range_cnt++;
         }
         // handle the situation of (s p ?o)
         else if (o[0] == '?') {
@@ -422,45 +418,8 @@ void PlanGenerator::GenPlanTable(const std::shared_ptr<IndexRetriever>& index,
             uint sid = index->String2ID(s, Pos::kSubject);
             uint pid = index->String2ID(p, Pos::kPredicate);
             std::shared_ptr<Result> r = index->GetBySP(sid, pid);
-            r->id = range_cnt;
             prestores_[var_oid].push_back(r);
-            range_cnt++;
         }
-    }
-
-    if (debug_) {
-        std::cout << "prestore_result_:" << std::endl;
-        for (int level = 0; level < int(prestores_.size()); level++) {
-            // _prestore_result_[level].size();
-            std::cout << "level: " << level << " count: " << prestores_[level].size() << std::endl;
-
-            for (int i = 0; i < int(prestores_[level].size()); i++) {
-                std::cout << "[";
-                std::cout << prestores_[level][i]->Size();
-                std::cout << "] ";
-            }
-
-            std::cout << std::endl;
-        }
-        std::cout << "---------------------------------" << std::endl;
-
-        std::cout << "all plan: " << std::endl;
-        for (int i = 0; i < int(query_plan_.size()); i++) {
-            for (int j = 0; j < int(query_plan_[i].size()); j++) {
-                Item item = query_plan_[i][j];
-                std::cout << item.search_result_->id << " [";
-                std::cout << item.search_result_->Size();
-                std::cout << "] ";
-            }
-            std::cout << std::endl;
-        }
-        std::cout << "---------------------------------" << std::endl;
-
-        std::cout << "all none: " << std::endl;
-        for (int i = 0; i < int(none_type_.size()); i++) {
-            std::cout << "level: " << i << " size: " << none_type_[i].size() << std::endl;
-        }
-        std::cout << "---------------------------------" << std::endl;
     }
 }
 
@@ -491,4 +450,8 @@ std::vector<std::vector<size_t>>& PlanGenerator::none_type() {
 
 std::vector<std::vector<std::shared_ptr<Result>>>& PlanGenerator::prestores() {
     return prestores_;
+}
+
+bool PlanGenerator::zero_result() {
+    return zero_result_;
 }

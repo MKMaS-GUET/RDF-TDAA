@@ -15,11 +15,15 @@ uint QueryResult(std::vector<std::vector<uint>>& result,
     // project_variables 是要输出的变量顺序
     // 而 result 的变量顺序是计划生成中的变量排序
     // 所以要获取每一个要输出的变量在 result 中的位置
-    const auto variable_indexes = query_plan->MappingVariable(parser->ProjectVariables());
     for (uint i = 0; i < parser->ProjectVariables().size(); i++) {
         std::cout << parser->ProjectVariables()[i] << " ";
     }
     std::cout << std::endl;
+
+    if (query_plan->zero_result())
+        return 0;
+
+    const auto variable_indexes = query_plan->MappingVariable(parser->ProjectVariables());
 
     uint cnt = 0;
     if (modifier.modifier_type_ == SPARQLParser::ProjectModifier::Distinct) {
@@ -35,11 +39,8 @@ uint QueryResult(std::vector<std::vector<uint>>& result,
     }
     for (auto it = result.begin(); it != last; ++it) {
         const auto& item = *it;
-        // std::cout << "---------------" << std::endl;
         for (const auto& idx : variable_indexes) {
             std::cout << index->ID2String(item[idx.first], idx.second) << " ";
-            // std::cout << item[idx.first] << " " << idx.second << std::endl;
-            // std::cout << index->ID2String(item[idx.first], idx.second) << std::endl;
         }
         cnt++;
         std::cout << "\n";
@@ -93,9 +94,10 @@ void RDFTDAA::Query(const std::string& db_name, const std::string& data_file) {
             auto query_plan = std::make_shared<PlanGenerator>(index, parser->TripleList());
             auto plan_end = std::chrono::high_resolution_clock::now();
 
-            auto executor = std::make_shared<QueryExecutor>(index, query_plan, parser->Limit());
-            executor->Query();
-
+            auto executor = std::make_shared<QueryExecutor>(index, query_plan, parser->Limit(), index->shared_cnt());
+            if (!query_plan->zero_result())
+                executor->Query();
+            
             auto projection_start = std::chrono::high_resolution_clock::now();
             uint cnt = QueryResult(executor->result(), index, query_plan, parser);
             auto projection_finish = std::chrono::high_resolution_clock::now();

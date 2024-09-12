@@ -53,7 +53,6 @@ class IndexRetriever {
     DAA spo_;
     DAA ops_;
 
-    ulong predicate_index_arrays_file_size_;
     MMap<uint> predicate_index_;
     MMap<uint> predicate_index_arrays_no_compress_;
     MMap<uint8_t> predicate_index_arrays_;
@@ -109,6 +108,8 @@ class IndexRetriever {
     uint GetBySPSize(uint s, uint p);
 
     uint GetByOPSize(uint o, uint p);
+
+    uint shared_cnt();
 };
 
 #endif

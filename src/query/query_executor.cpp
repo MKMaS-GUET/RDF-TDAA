@@ -36,13 +36,15 @@ QueryExecutor::Stat& QueryExecutor::Stat::operator=(const Stat& other) {
 
 QueryExecutor::QueryExecutor(std::shared_ptr<IndexRetriever> index,
                              std::shared_ptr<PlanGenerator>& plan,
-                             uint limit)
+                             uint limit,
+                             uint shared_cnt)
     : stat_(plan->query_plan()),
       index_(index),
       other_type_(plan->other_type()),
       none_type_(plan->none_type()),
       prestores_(plan->prestores()),
-      limit_(limit) {}
+      limit_(limit),
+      shared_cnt_(shared_cnt) {}
 
 std::shared_ptr<std::vector<uint>> QueryExecutor::LeapfrogJoin(ResultList& indexes) {
     std::shared_ptr<std::vector<uint>> result_set = std::make_shared<std::vector<uint>>();
@@ -106,25 +108,24 @@ std::shared_ptr<std::vector<uint>> QueryExecutor::LeapfrogJoin(ResultList& index
 bool QueryExecutor::PreJoin() {
     ResultList result_list;
     std::stringstream key;
-    for (long unsigned int level_ = 1; level_ < stat_.plan_.size(); level_++) {
-        if (!none_type_[level_].empty())
+    _pre_join_result = std::vector<std::shared_ptr<std::vector<uint>>>(stat_.plan_.size());
+    for (long unsigned int level = 0; level < stat_.plan_.size(); level++) {
+        if (level != 0 && (!none_type_[level].empty() || !prestores_[level].empty()))
             continue;
+        if (level == 0 && prestores_[0].size())
+            result_list.AddVectors(prestores_[0]);
 
-        if (!prestores_[level_].empty())
-            continue;
-
-        for (long unsigned int i = 0; i < stat_.plan_[level_].size(); i++) {
-            if (stat_.plan_[level_][i].search_type_ != PlanGenerator::Item::TypeT::kNone) {
-                key << stat_.plan_[level_][i].search_result_->id;
-                key << "_";
-                result_list.AddVector(stat_.plan_[level_][i].search_result_);
+        for (long unsigned int i = 0; i < stat_.plan_[level].size(); i++) {
+            if (stat_.plan_[level][i].search_type_ != PlanGenerator::Item::TypeT::kNone) {
+                result_list.AddVector(stat_.plan_[level][i].search_result_);
             }
         }
         if (result_list.Size() > 1) {
-            _pre_join_result[key.str()] = LeapfrogJoin(result_list);
+            _pre_join_result[level] = LeapfrogJoin(result_list);
+            if (_pre_join_result[level]->size() == 0)
+                return false;
         }
         result_list.Clear();
-        key.str("");
     }
     return true;
 }
@@ -196,29 +197,15 @@ void QueryExecutor::EnumerateItems(Stat& stat) {
 
     const auto& item_other_type_indices_ = other_type_[stat.level_];
     uint join_case = result_list.Size();
-    if (join_case == 0) {
-        if (_pre_join_result.size() != 0) {
-            std::stringstream key_stream;
-            for (const auto& idx : item_other_type_indices_) {
-                if (_pre_join_result.size() != 0) {
-                    key_stream << stat.plan_[stat.level_][idx].search_result_->id;
-                    key_stream << "_";
-                }
-            }
-            std::string key = key_stream.str();
 
-            auto it = _pre_join_result.find(key);
-            if (it == _pre_join_result.end()) {
-                for (const auto& idx : item_other_type_indices_) {
-                    result_list.AddVector(stat.plan_[stat.level_][idx].search_result_);
-                }
-            } else {
-                stat.candidate_result_[stat.level_]->reserve(it->second->size());
-                for (auto iter = it->second->begin(); iter != it->second->end(); iter++) {
-                    stat.candidate_result_[stat.level_]->emplace_back(std::move(*iter));
-                }
-                return;
+    if (join_case == 0 || stat_.level_ == 0) {
+        if (_pre_join_result[stat_.level_] != nullptr) {
+            stat.candidate_result_[stat.level_]->reserve(_pre_join_result[stat_.level_]->size());
+            for (auto iter = _pre_join_result[stat_.level_]->begin();
+                 iter != _pre_join_result[stat_.level_]->end(); iter++) {
+                stat.candidate_result_[stat.level_]->emplace_back(std::move(*iter));
             }
+            return;
         } else {
             for (const auto& idx : item_other_type_indices_) {
                 result_list.AddVector(stat.plan_[stat.level_][idx].search_result_);
@@ -226,9 +213,10 @@ void QueryExecutor::EnumerateItems(Stat& stat) {
         }
         stat.candidate_result_[stat.level_] = LeapfrogJoin(result_list);
     }
-    if (join_case == 1) {
+
+    if (join_case == 1 && stat_.level_ != 0) {
         // for (const auto& idx : item_other_type_indices_) {
-        //     result_list.AddVector(stat.plan_[stat.level_][idx].search_result_);
+        // result_list.AddVector(stat.plan_[stat.level_][idx].search_result_);
         // }
         // stat.candidate_result_[stat.level_] = LeapfrogJoin(result_list);
         std::shared_ptr<Result> range = result_list.GetRangeByIndex(0);
@@ -286,7 +274,7 @@ bool QueryExecutor::UpdateCurrentTuple(Stat& stat) {
     return false;
 }
 
-bool QueryExecutor::SearchPredicatePath(Stat& stat, uint64_t entity) {
+bool QueryExecutor::SearchPredicatePath(Stat& stat, uint entity) {
     bool match = true;
     // 遍历一个变量（level_）的在所有三元组中的查询结果
     for (auto& item : stat.plan_[stat.level_]) {
@@ -329,7 +317,9 @@ bool QueryExecutor::SearchPredicatePath(Stat& stat, uint64_t entity) {
 
 void QueryExecutor::Query() {
     auto begin = std::chrono::high_resolution_clock::now();
-    PreJoin();
+
+    if (!PreJoin())
+        return;
 
     for (;;) {
         if (stat_.at_end_) {
@@ -353,7 +343,7 @@ void QueryExecutor::Query() {
     }
 
     auto end = std::chrono::high_resolution_clock::now();
-    
+
     query_duration_ = end - begin;
 }
 

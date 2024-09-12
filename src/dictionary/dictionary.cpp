@@ -38,21 +38,28 @@ Dictionary::Dictionary(std::string& dict_path) : dict_path_(dict_path) {
     id2predicate_ = std::vector<std::string>(predicate_cnt_ + 1);
     LoadPredicate(id2predicate_, predicate2id_);
 
-    if (menagement_data[4] == 32)
-        id2subject_ = std::move(Node<uint>(dict_path_ + "/subjects/"));
-    else
-        id2subject_ = std::move(Node<ulong>(dict_path_ + "/subjects/"));
+    std::thread t1([&]() {
+        if (menagement_data[4] == 32)
+            id2subject_ = Node<uint>(dict_path_ + "/subjects/");
+        else
+            id2subject_ = Node<ulong>(dict_path_ + "/subjects/");
+    });
+    std::thread t2([&]() {
+        if (menagement_data[5] == 32)
+            id2object_ = Node<uint>(dict_path_ + "/objects/");
+        else
+            id2object_ = Node<ulong>(dict_path_ + "/objects/");
+    });
+    std::thread t3([&]() {
+        if (menagement_data[6] == 32)
+            id2shared_ = Node<uint>(dict_path_ + "/shared/");
+        else
+            id2shared_ = Node<ulong>(dict_path_ + "/shared/");
+    });
 
-    if (menagement_data[5] == 32)
-        id2object_ = std::move(Node<uint>(dict_path_ + "/objects/"));
-    else
-        id2object_ = std::move(Node<ulong>(dict_path_ + "/objects/"));
-
-    if (menagement_data[6] == 32)
-        id2shared_ = std::move(Node<uint>(dict_path_ + "/shared/"));
-    else
-        id2shared_ = std::move(Node<ulong>(dict_path_ + "/shared/"));
-
+    t1.join();
+    t2.join();
+    t3.join();
     menagement_data.CloseMap();
 }
 
@@ -135,14 +142,19 @@ const char* Dictionary::ID2String(uint id, Pos pos) {
     }
 
     if (id <= shared_cnt_) {
-        return std::get<Node<uint>>(id2shared_)[id];
+        return (std::holds_alternative<Node<uint>>(id2shared_)) ? std::get<Node<uint>>(id2shared_)[id]
+                                                                : std::get<Node<ulong>>(id2shared_)[id];
     }
 
     switch (pos) {
         case kSubject:
-            return std::get<Node<uint>>(id2subject_)[id - shared_cnt_];
+            return (std::holds_alternative<Node<uint>>(id2subject_))
+                       ? std::get<Node<uint>>(id2subject_)[id - shared_cnt_]
+                       : std::get<Node<ulong>>(id2subject_)[id - shared_cnt_];
         case kObject:
-            return std::get<Node<uint>>(id2object_)[id - shared_cnt_ - subject_cnt_];
+            return (std::holds_alternative<Node<uint>>(id2object_))
+                       ? std::get<Node<uint>>(id2object_)[id - shared_cnt_ - subject_cnt_]
+                       : std::get<Node<ulong>>(id2object_)[id - shared_cnt_ - subject_cnt_];
         default:
             break;
     }

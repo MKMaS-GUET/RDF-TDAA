@@ -32,9 +32,11 @@ class QueryExecutor {
     std::vector<std::vector<size_t>>& none_type_;
     std::vector<std::vector<std::shared_ptr<Result>>>& prestores_;
     uint limit_;
+    uint shared_cnt_;
     std::chrono::duration<double, std::milli> query_duration_;
 
-    hash_map<std::string, std::shared_ptr<std::vector<uint>>> _pre_join_result;
+    // hash_map<std::string, std::shared_ptr<std::vector<uint>>> _pre_join_result;
+    std::vector<std::shared_ptr<std::vector<uint>>> _pre_join_result;
 
     std::shared_ptr<std::vector<uint>> LeapfrogJoin(ResultList& indexes);
 
@@ -50,10 +52,13 @@ class QueryExecutor {
 
     bool UpdateCurrentTuple(Stat& stat);
 
-    bool SearchPredicatePath(Stat& stat, uint64_t entity);
+    bool SearchPredicatePath(Stat& stat, uint entity);
 
    public:
-    QueryExecutor(std::shared_ptr<IndexRetriever> index, std::shared_ptr<PlanGenerator>& plan, uint limit);
+    QueryExecutor(std::shared_ptr<IndexRetriever> index,
+                  std::shared_ptr<PlanGenerator>& plan,
+                  uint limit,
+                  uint shared_cnt);
 
     void Query();
 

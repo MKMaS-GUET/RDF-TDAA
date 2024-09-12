@@ -8,13 +8,9 @@ void Endpoint::query(const httplib::Request& req, httplib::Response& res) {
 
         auto parser = std::make_shared<SPARQLParser>(sparql);
         auto query_plan = std::make_shared<PlanGenerator>(db_index, parser->TripleList());
-
-        auto executor = std::make_shared<QueryExecutor>(db_index, query_plan, parser->Limit());
-        executor->Query();
-
-        std::vector<std::string> variables = parser->ProjectVariables();
-        const auto variable_indexes = query_plan->MappingVariable(variables);
-
+        auto executor = std::make_shared<QueryExecutor>(db_index, query_plan, parser->Limit(), db_index->shared_cnt());
+        if (!query_plan->zero_result())
+            executor->Query();
         std::vector<std::vector<uint>>& results_id = executor->result();
 
         std::chrono::duration<double, std::milli> diff;
@@ -27,6 +23,8 @@ void Endpoint::query(const httplib::Request& req, httplib::Response& res) {
 
         rapidjson::StringBuffer result;
         rapidjson::Writer<rapidjson::StringBuffer> writer(result);
+
+        std::vector<std::string> variables = parser->ProjectVariables();
 
         writer.StartObject();
 
@@ -45,6 +43,8 @@ void Endpoint::query(const httplib::Request& req, httplib::Response& res) {
         writer.StartArray();
 
         if (results_id.size()) {
+            const auto variable_indexes = query_plan->MappingVariable(variables);
+
             auto last = results_id.end();
             const auto& modifier = parser->project_modifier();
             if (modifier.modifier_type_ == SPARQLParser::ProjectModifier::Distinct) {

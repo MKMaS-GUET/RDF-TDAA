@@ -42,12 +42,28 @@ IndexRetriever::IndexRetriever(std::string db_name) : db_name_(db_name) {
 
     dict_ = Dictionary(db_dictionary_path_);
 
-    for (uint id = 1; id <= dict_.shared_cnt(); id++)
-        dict_.ID2String(id, Pos::kShared);
-    for (uint id = 1; id <= dict_.subject_cnt(); id++)
-        dict_.ID2String(dict_.shared_cnt() + id, Pos::kSubject);
-    for (uint id = 1; id <= dict_.object_cnt(); id++)
-        dict_.ID2String(dict_.shared_cnt() + dict_.object_cnt() + id, Pos::kObject);
+    std::thread t1([&]() {
+        for (uint id = 1; id <= dict_.shared_cnt(); id++) {
+            if (id % 10 == 0)
+                delete[] dict_.ID2String(id, Pos::kShared);
+        }
+    });
+    std::thread t2([&]() {
+        for (uint id = 1; id <= dict_.subject_cnt(); id++) {
+            if (id % 10 == 0)
+                delete[] dict_.ID2String(dict_.shared_cnt() + id, Pos::kSubject);
+        }
+    });
+    std::thread t3([&]() {
+        for (uint id = 1; id <= dict_.object_cnt(); id++) {
+            if (id % 10 == 0)
+                delete[] dict_.ID2String(dict_.shared_cnt() + dict_.subject_cnt() + id, Pos::kObject);
+        }
+    });
+
+    t1.join();
+    t2.join();
+    t3.join();
 
     Init();
     ps_sets_ = std::vector<std::shared_ptr<Result>>(dict_.predicate_cnt());
@@ -243,8 +259,8 @@ uint IndexRetriever::predicate_cnt() {
 }
 
 std::shared_ptr<Result> IndexRetriever::GetSSet(uint pid) {
-    if (predicate_index_compressed_) {
-        if (ps_sets_[pid - 1]->Size() == 0) {
+    if (ps_sets_[pid - 1]->Size() == 0) {
+        if (predicate_index_compressed_) {
             uint s_array_offset = predicate_index_[(pid - 1) * 4];
             uint s_array_size = predicate_index_[(pid - 1) * 4 + 2] - s_array_offset;
 
@@ -260,9 +276,7 @@ std::shared_ptr<Result> IndexRetriever::GetSSet(uint pid) {
                 recovdata[i] += recovdata[i - 1];
 
             ps_sets_[pid - 1] = std::make_shared<Result>(recovdata, total_length);
-        }
-    } else {
-        if (ps_sets_[pid - 1]->Size() == 0) {
+        } else {
             uint s_array_offset = predicate_index_[(pid - 1) * 2];
             uint s_array_size = predicate_index_[(pid - 1) * 2 + 1] - s_array_offset;
 
@@ -277,7 +291,18 @@ std::shared_ptr<Result> IndexRetriever::GetSSet(uint pid) {
 }
 
 uint IndexRetriever::GetSSetSize(uint pid) {
-    return GetSSet(pid)->Size();
+    if (ps_sets_[pid - 1]->Size() == 0) {
+        uint s_array_size;
+        if (predicate_index_compressed_) {
+            s_array_size = predicate_index_[(pid - 1) * 4 + 1];
+        } else {
+            uint s_array_offset = predicate_index_[(pid - 1) * 2];
+            s_array_size = predicate_index_[(pid - 1) * 2 + 1] - s_array_offset;
+        }
+        return s_array_size;
+    }
+
+    return ps_sets_[pid - 1]->Size();
 }
 
 std::shared_ptr<Result> IndexRetriever::GetOSet(uint pid) {
@@ -288,7 +313,7 @@ std::shared_ptr<Result> IndexRetriever::GetOSet(uint pid) {
             if (pid != dict_.predicate_cnt())
                 o_array_size = predicate_index_[pid * 4] - o_array_offset;
             else
-                o_array_size = predicate_index_arrays_file_size_ - o_array_offset;
+                o_array_size = predicate_index_arrays_.size_ - o_array_offset;
 
             uint8_t* compressed_buffer = new uint8_t[o_array_size];
             for (uint i = 0; i < o_array_size; i++)
@@ -309,7 +334,7 @@ std::shared_ptr<Result> IndexRetriever::GetOSet(uint pid) {
             if (pid != dict_.predicate_cnt())
                 o_array_size = predicate_index_[pid * 2] - o_array_offset;
             else
-                o_array_size = predicate_index_arrays_file_size_ / 4 - o_array_offset;
+                o_array_size = predicate_index_.size_ / 4 - o_array_offset;
 
             uint* set = new uint[o_array_size];
             for (uint i = 0; i < o_array_size; i++)
@@ -322,7 +347,20 @@ std::shared_ptr<Result> IndexRetriever::GetOSet(uint pid) {
 }
 
 uint IndexRetriever::GetOSetSize(uint pid) {
-    return GetOSet(pid)->Size();
+    if (po_sets_[pid - 1]->Size() == 0) {
+        uint o_array_size;
+        if (predicate_index_compressed_) {
+            o_array_size = predicate_index_[(pid - 1) * 4 + 3];
+        } else {
+            uint o_array_offset = predicate_index_[(pid - 1) * 2 + 1];
+            if (pid != dict_.predicate_cnt())
+                o_array_size = predicate_index_[pid * 2] - o_array_offset;
+            else
+                o_array_size = predicate_index_.size_ / 4 - o_array_offset;
+        }
+        return o_array_size;
+    }
+    return po_sets_[pid - 1]->Size();
 }
 
 uint IndexRetriever::PSSize(uint pid) {
@@ -365,6 +403,7 @@ std::shared_ptr<Result> IndexRetriever::GetByOP(uint o, uint p) {
                     daa_start = AccessToDAA(ops_, (o - 2) * 2 + 1);
                     daa_size = daa_size - daa_start;
                 }
+
                 return AccessDAA(i, daa_start, daa_size, Order::kOPS);
             }
         }
@@ -373,15 +412,13 @@ std::shared_ptr<Result> IndexRetriever::GetByOP(uint o, uint p) {
 }
 
 uint IndexRetriever::GetBySPSize(uint s, uint p) {
-    uint size = GetBySP(s, p)->Size();
-    if (size)
-        return size;
-    return UINT_MAX;
+    return GetBySP(s, p)->Size();
 }
 
 uint IndexRetriever::GetByOPSize(uint o, uint p) {
-    uint size = GetByOP(o, p)->Size();
-    if (size)
-        return size;
-    return UINT_MAX;
+    return GetByOP(o, p)->Size();
+}
+
+uint IndexRetriever::shared_cnt() {
+    return dict_.shared_cnt();
 }
