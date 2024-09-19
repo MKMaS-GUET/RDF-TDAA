@@ -7,8 +7,9 @@ void Endpoint::query(const httplib::Request& req, httplib::Response& res) {
         auto exec_start = std::chrono::high_resolution_clock::now();
 
         auto parser = std::make_shared<SPARQLParser>(sparql);
-        auto query_plan = std::make_shared<PlanGenerator>(db_index, parser->TripleList());
-        auto executor = std::make_shared<QueryExecutor>(db_index, query_plan, parser->Limit(), db_index->shared_cnt());
+        auto query_plan = std::make_shared<PlanGenerator>(db_index, parser->TriplePatterns());
+        auto executor =
+            std::make_shared<QueryExecutor>(db_index, query_plan, parser->Limit(), db_index->shared_cnt());
         if (!query_plan->zero_result())
             executor->Query();
         std::vector<std::vector<uint>>& results_id = executor->result();
@@ -50,9 +51,10 @@ void Endpoint::query(const httplib::Request& req, httplib::Response& res) {
             if (modifier.modifier_type_ == SPARQLParser::ProjectModifier::Distinct) {
                 last = std::unique(results_id.begin(), results_id.end(),
                                    [&](const std::vector<uint>& a, const std::vector<uint>& b) {
-                                       return std::all_of(
-                                           variable_indexes.begin(), variable_indexes.end(),
-                                           [&](std::pair<uint, Pos> i) { return a[i.first] == b[i.first]; });
+                                       return std::all_of(variable_indexes.begin(), variable_indexes.end(),
+                                                          [&](PlanGenerator::Variable v) {
+                                                              return a[v.priority_] == b[v.priority_];
+                                                          });
                                    });
             }
             uint size = last - results_id.begin();
@@ -62,7 +64,7 @@ void Endpoint::query(const httplib::Request& req, httplib::Response& res) {
                 writer.StartArray();
                 for (uint i = 0; i < variable_indexes.size(); i++) {
                     auto& idx = variable_indexes[i];
-                    writer.String(db_index->ID2String(item[idx.first], idx.second));
+                    writer.String(db_index->ID2String(item[idx.priority_], idx.position_));
                 }
                 writer.EndArray();
             }

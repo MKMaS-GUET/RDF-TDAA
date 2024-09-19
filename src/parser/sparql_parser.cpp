@@ -12,22 +12,28 @@ std::string SPARQLParser::ParserException::to_string() const {
     return message_;
 }
 
-SPARQLParser::TriplePatternElem::TriplePatternElem()
-    : type_(Type::Blank), literal_type_(LiteralType::None), value_() {}
+SPARQLParser::Term::Term() : type_(Type::kBlank), literal_type_(ValueType::kNone), value_() {}
 
-SPARQLParser::TriplePatternElem::TriplePatternElem(Type type, LiteralType literal_type, std::string value)
+SPARQLParser::Term::Term(Type type, ValueType literal_type, std::string value)
     : type_(type), literal_type_(literal_type), value_(std::move(value)) {}
 
-SPARQLParser::TriplePattern::TriplePattern(TriplePatternElem subj,
-                                           TriplePatternElem pred,
-                                           TriplePatternElem obj,
-                                           bool is_option)
-    : subj_(std::move(subj)), pred_(std::move(pred)), obj_(std::move(obj)), is_option_(is_option) {}
+bool SPARQLParser::Term::IsVariable() const {
+    return type_ == Type::kVariable;
+}
 
-SPARQLParser::TriplePattern::TriplePattern(TriplePatternElem subj,
-                                           TriplePatternElem pred,
-                                           TriplePatternElem obj)
-    : subj_(std::move(subj)), pred_(std::move(pred)), obj_(std::move(obj)), is_option_(false) {}
+SPARQLParser::TriplePattern::TriplePattern(Term subj, Term pred, Term obj, bool is_option, uint variale_cnt)
+    : subject_(std::move(subj)),
+      predicate_(std::move(pred)),
+      object_(std::move(obj)),
+      is_option_(is_option),
+      variale_cnt_(variale_cnt) {}
+
+SPARQLParser::TriplePattern::TriplePattern(Term subj, Term pred, Term obj)
+    : subject_(std::move(subj)),
+      predicate_(std::move(pred)),
+      object_(std::move(obj)),
+      is_option_(false),
+      variale_cnt_(0) {}
 
 SPARQLParser::ProjectModifier::ProjectModifier(Type modifierType) : modifier_type_(modifierType) {}
 
@@ -59,9 +65,9 @@ void SPARQLParser::parse() {
         project_variables_.clear();
         std::set<std::string> variables_set;
         for (const auto& item : triple_patterns_) {
-            const auto& s = item.subj_.value_;
-            const auto& p = item.pred_.value_;
-            const auto& o = item.obj_.value_;
+            const auto& s = item.subject_.value_;
+            const auto& p = item.predicate_.value_;
+            const auto& o = item.object_.value_;
             if (s[0] == '?')
                 variables_set.insert(s);
             if (p[0] == '?')
@@ -241,37 +247,40 @@ void SPARQLParser::ParseGroupGraphPattern() {
 }
 
 void SPARQLParser::ParseBasicGraphPattern(bool is_option) {
-    TriplePatternElem pattern_elem[3];
-    for (int i = 0; i < 3; ++i) {
+    Term pattern_term[3];
+    uint variable_cnt = 0;
+    for (uint i = 0; i < 3; ++i) {
         auto token_t = sparql_lexer_.GetNextTokenType();
         std::string token_value = sparql_lexer_.GetCurrentTokenValue();
-        TriplePatternElem elem;
+        Term term;
         switch (token_t) {
             case SPARQLLexer::TokenT::kVariable:
-                elem = MakeVariable(token_value);
+                term = MakeVariable(token_value);
+                variable_cnt++;
                 break;
             case SPARQLLexer::TokenT::kIRI:
-                elem = MakeIRI(token_value);
+                term = MakeIRI(token_value);
                 break;
             case SPARQLLexer::TokenT::kString:
-                elem = MakeStringLiteral(token_value);
+                term = MakeStringLiteral(token_value);
                 break;
             case SPARQLLexer::TokenT::kNumber:
-                elem = MakeDoubleLiteral(token_value);
+                term = MakeDoubleLiteral(token_value);
                 break;
             case SPARQLLexer::TokenT::kIdentifier:
-                elem = MakeNoTypeLiteral(token_value);
+                term = MakeNoTypeLiteral(token_value);
                 break;
             default:
                 throw ParserException("Except variable or IRI or Literal or Blank");
         }
-        pattern_elem[i] = elem;
+        term.position_ = SPARQLParser::Term::Positon(i);
+        pattern_term[i] = term;
     }
     auto token_t = sparql_lexer_.GetNextTokenType();
     if (token_t != SPARQLLexer::TokenT::kDot) {
         sparql_lexer_.PutBack(token_t);
     }
-    TriplePattern pattern(pattern_elem[0], pattern_elem[1], pattern_elem[2], is_option);
+    TriplePattern pattern(pattern_term[0], pattern_term[1], pattern_term[2], is_option, variable_cnt);
     triple_patterns_.push_back(std::move(pattern));
 }
 
@@ -289,37 +298,37 @@ void SPARQLParser::ParseLimit() {
     }
 }
 
-SPARQLParser::TriplePatternElem SPARQLParser::MakeVariable(std::string variable) {
-    return {TriplePatternElem::Type::Variable, TriplePatternElem::LiteralType::None, std::move(variable)};
+SPARQLParser::Term SPARQLParser::MakeVariable(std::string variable) {
+    return {Term::Type::kVariable, Term::ValueType::kNone, std::move(variable)};
 }
 
-SPARQLParser::TriplePatternElem SPARQLParser::MakeIRI(std::string IRI) {
-    return {TriplePatternElem::Type::IRI, TriplePatternElem::LiteralType::None, std::move(IRI)};
+SPARQLParser::Term SPARQLParser::MakeIRI(std::string IRI) {
+    return {Term::Type::kIRI, Term::ValueType::kNone, std::move(IRI)};
 }
 
-SPARQLParser::TriplePatternElem SPARQLParser::MakeIntegerLiteral(std::string literal) {
-    return {TriplePatternElem::Type::Literal, TriplePatternElem::LiteralType::Integer, std::move(literal)};
+SPARQLParser::Term SPARQLParser::MakeIntegerLiteral(std::string literal) {
+    return {Term::Type::kLiteral, Term::ValueType::kInteger, std::move(literal)};
 }
 
-SPARQLParser::TriplePatternElem SPARQLParser::MakeDoubleLiteral(std::string literal) {
-    return {TriplePatternElem::Type::Literal, TriplePatternElem::LiteralType::Double, std::move(literal)};
+SPARQLParser::Term SPARQLParser::MakeDoubleLiteral(std::string literal) {
+    return {Term::Type::kLiteral, Term::ValueType::kDouble, std::move(literal)};
 }
 
-SPARQLParser::TriplePatternElem SPARQLParser::MakeNoTypeLiteral(std::string literal) {
-    return {TriplePatternElem::Type::Literal, TriplePatternElem::LiteralType::None, std::move(literal)};
+SPARQLParser::Term SPARQLParser::MakeNoTypeLiteral(std::string literal) {
+    return {Term::Type::kLiteral, Term::ValueType::kNone, std::move(literal)};
 }
 
-SPARQLParser::TriplePatternElem SPARQLParser::MakeStringLiteral(const std::string& literal) {
+SPARQLParser::Term SPARQLParser::MakeStringLiteral(const std::string& literal) {
     size_t literal_len = literal.size();
     std::string cleaned_literal;
     if (literal_len > 2) {
         cleaned_literal = literal.substr(1, literal_len - 2);
     }
-    return {TriplePatternElem::Type::Literal, TriplePatternElem::LiteralType::String, cleaned_literal};
+    return {Term::Type::kLiteral, Term::ValueType::kString, cleaned_literal};
 }
 
-SPARQLParser::TriplePatternElem SPARQLParser::MakeFunctionLiteral(std::string literal) {
-    return {TriplePatternElem::Type::Literal, TriplePatternElem::LiteralType::Function, std::move(literal)};
+SPARQLParser::Term SPARQLParser::MakeFunctionLiteral(std::string literal) {
+    return {Term::Type::kLiteral, Term::ValueType::kFunction, std::move(literal)};
 }
 
 SPARQLParser::SPARQLParser(const SPARQLLexer& sparql_lexer)
@@ -349,7 +358,7 @@ const std::vector<SPARQLParser::TriplePattern>& SPARQLParser::TriplePatterns() c
 std::vector<std::vector<std::string>> SPARQLParser::TripleList() const {
     std::vector<std::vector<std::string>> list;
     for (const auto& item : triple_patterns_) {
-        list.push_back({item.subj_.value_, item.pred_.value_, item.obj_.value_});
+        list.push_back({item.subject_.value_, item.predicate_.value_, item.object_.value_});
     }
     return list;
 }

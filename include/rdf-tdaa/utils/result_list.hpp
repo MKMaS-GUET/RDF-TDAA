@@ -8,55 +8,19 @@
 
 class ResultList {
    public:
-    class Result {
-       public:
-        uint* start_;
-        uint size_;
-
-        Result();
-
-        Result(uint* start, uint size);
-
-        ~Result();
-
-        class Iterator {
-            uint* ptr_;
-
-           public:
-            Iterator();
-            Iterator(uint* p);
-            Iterator(const Iterator& it);
-
-            Iterator& operator++();
-            Iterator operator++(int);
-            uint operator-(Result::Iterator r_it);
-            Iterator operator-(int num);
-            Iterator operator+(int num);
-            bool operator==(const Iterator& rhs) const;
-            bool operator!=(const Iterator& rhs) const;
-            bool operator<(const Iterator& rhs) const;
-            uint& operator*();
-        };
-
-        Iterator Begin();
-        Iterator End();
-        uint& operator[](uint i);
-        uint Size();
-    };
-
    private:
-    std::vector<std::shared_ptr<Result>> results_;
+    std::vector<std::shared_ptr<std::vector<uint>>> results_;
 
-    std::vector<Result::Iterator> vector_current_pos_;
+    std::vector<std::vector<uint>::iterator> vector_current_pos_;
 
    public:
     ResultList();
 
-    void AddVector(std::shared_ptr<Result> range);
+    void AddVector(std::shared_ptr<std::vector<uint>> range);
 
-    bool AddVectors(std::vector<std::shared_ptr<Result>> ranges);
+    bool AddVectors(std::vector<std::shared_ptr<std::vector<uint>>> ranges);
 
-    std::shared_ptr<Result> Shortest();
+    std::shared_ptr<std::vector<uint>> Shortest();
 
     void UpdateCurrentPostion();
 
@@ -68,7 +32,7 @@ class ResultList {
     // 更新range的起始迭代器
     void NextVal(int i);
 
-    std::shared_ptr<Result> GetRangeByIndex(int i);
+    std::shared_ptr<std::vector<uint>> GetRangeByIndex(int i);
 
     bool HasEmpty();
 

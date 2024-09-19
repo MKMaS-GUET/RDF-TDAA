@@ -136,8 +136,8 @@ void Dictionary::Close() {
     shared_ids_.CloseMap();
 }
 
-const char* Dictionary::ID2String(uint id, Pos pos) {
-    if (pos == kPredicate) {
+const char* Dictionary::ID2String(uint id, SPARQLParser::Term::Positon pos) {
+    if (pos == SPARQLParser::Term::Positon::kPredicate) {
         return id2predicate_[id].c_str();
     }
 
@@ -147,11 +147,11 @@ const char* Dictionary::ID2String(uint id, Pos pos) {
     }
 
     switch (pos) {
-        case kSubject:
+        case SPARQLParser::Term::Positon::kSubject:
             return (std::holds_alternative<Node<uint>>(id2subject_))
                        ? std::get<Node<uint>>(id2subject_)[id - shared_cnt_]
                        : std::get<Node<ulong>>(id2subject_)[id - shared_cnt_];
-        case kObject:
+        case SPARQLParser::Term::Positon::kObject:
             return (std::holds_alternative<Node<uint>>(id2object_))
                        ? std::get<Node<uint>>(id2object_)[id - shared_cnt_ - subject_cnt_]
                        : std::get<Node<ulong>>(id2object_)[id - shared_cnt_ - subject_cnt_];
@@ -161,14 +161,14 @@ const char* Dictionary::ID2String(uint id, Pos pos) {
     throw std::runtime_error("Unhandled case in ID2String");
 }
 
-uint Dictionary::String2ID(const std::string& str, Pos pos) {
+uint Dictionary::String2ID(const std::string& str, SPARQLParser::Term::Positon pos) {
     switch (pos) {
-        case kSubject:  // subject
+        case SPARQLParser::Term::Positon::kSubject:  // subject
             return FindInMaps(subject_cnt_, kSubjectMap, str);
-        case kPredicate: {  // predicate
+        case SPARQLParser::Term::Positon::kPredicate: {  // predicate
             return Find(kPredicateMap, str);
         }
-        case kObject:  // object
+        case SPARQLParser::Term::Positon::kObject:  // object
             return FindInMaps(object_cnt_, kObjectMap, str);
         default:
             break;

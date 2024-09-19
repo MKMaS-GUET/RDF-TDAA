@@ -46,32 +46,32 @@ QueryExecutor::QueryExecutor(std::shared_ptr<IndexRetriever> index,
       limit_(limit),
       shared_cnt_(shared_cnt) {}
 
-std::shared_ptr<std::vector<uint>> QueryExecutor::LeapfrogJoin(ResultList& indexes) {
+std::shared_ptr<std::vector<uint>> QueryExecutor::LeapfrogJoin(ResultList& results) {
     std::shared_ptr<std::vector<uint>> result_set = std::make_shared<std::vector<uint>>();
 
-    if (indexes.Size() == 1) {
+    if (results.Size() == 1) {
         std::shared_ptr<std::vector<uint>> result = std::make_shared<std::vector<uint>>();
-        for (uint i = 0; i < indexes.GetRangeByIndex(0)->Size(); i++)
-            result->push_back(indexes.GetRangeByIndex(0)->operator[](i));
+        for (uint i = 0; i < results.GetRangeByIndex(0)->size(); i++)
+            result->push_back(results.GetRangeByIndex(0)->operator[](i));
         return result;
     }
 
     // Check if any index is empty => Intersection empty
-    if (indexes.HasEmpty())
+    if (results.HasEmpty())
         return result_set;
 
-    indexes.UpdateCurrentPostion();
+    results.UpdateCurrentPostion();
     // 创建指向每一个列表的指针，初始指向列表的第一个值
 
     //  max 是所有指针指向位置的最大值，初始的最大值就是对列表排序后，最后一个列表的第一个值
-    size_t max = indexes.GetCurrentValOfRange(indexes.Size() - 1);
+    size_t max = results.GetCurrentValOfRange(results.Size() - 1);
     // 当前迭代器的 id
     size_t idx = 0;
 
     uint value;
     while (true) {
         // 当前迭代器的第一个值
-        value = indexes.GetCurrentValOfRange(idx);
+        value = results.GetCurrentValOfRange(idx);
 
         // get_current_val_time += diff.count();
         // An intersecting value has been found!
@@ -84,22 +84,22 @@ std::shared_ptr<std::vector<uint>> QueryExecutor::LeapfrogJoin(ResultList& index
         // 因为此时已经遍历了所有迭代器，都找到了相同的值，所以就找到了交集中的值
         if (value == max) {
             result_set->push_back(value);
-            indexes.NextVal(idx);
+            results.NextVal(idx);
             // We shall find a value greater or equal than the current max
         } else {
             // 将当前迭代器指向的位置变为第一个大于 max 的值的位置
-            indexes.Seek(idx, max);
+            results.Seek(idx, max);
         }
 
-        if (indexes.AtEnd(idx)) {
+        if (results.AtEnd(idx)) {
             break;
         }
 
         // Store the maximum
-        max = indexes.GetCurrentValOfRange(idx);
+        max = results.GetCurrentValOfRange(idx);
 
         idx++;
-        idx = idx % indexes.Size();
+        idx = idx % results.Size();
     }
 
     return result_set;
@@ -219,9 +219,9 @@ void QueryExecutor::EnumerateItems(Stat& stat) {
         // result_list.AddVector(stat.plan_[stat.level_][idx].search_result_);
         // }
         // stat.candidate_result_[stat.level_] = LeapfrogJoin(result_list);
-        std::shared_ptr<Result> range = result_list.GetRangeByIndex(0);
+        std::shared_ptr<std::vector<uint>> range = result_list.GetRangeByIndex(0);
         stat.candidate_result_[stat.level_] = std::make_shared<std::vector<uint>>();
-        for (uint i = 0; i < range->Size(); i++) {
+        for (uint i = 0; i < range->size(); i++) {
             stat.candidate_result_[stat.level_]->push_back(range->operator[](i));
         }
     }
@@ -289,7 +289,7 @@ bool QueryExecutor::SearchPredicatePath(Stat& stat, uint entity) {
                 }
 
                 other_item.search_result_ = index_->GetByOP(entity, item.search_code_);
-                if (other_item.search_result_->Size() == 0) {
+                if (other_item.search_result_->size() == 0) {
                     match = false;
                 }
 
@@ -304,7 +304,7 @@ bool QueryExecutor::SearchPredicatePath(Stat& stat, uint entity) {
                 }
 
                 other_item.search_result_ = index_->GetBySP(entity, item.search_code_);
-                if (other_item.search_result_->Size() == 0) {
+                if (other_item.search_result_->size() == 0) {
                     match = false;
                 }
 

@@ -31,16 +31,17 @@ uint QueryResult(std::vector<std::vector<uint>>& result,
                            // 判断两个列表 a 和 b 是否相同，
                            [&](const std::vector<uint>& a, const std::vector<uint>& b) {
                                // std::all_of 可以用来判断数组中的值是否都满足一个条件
-                               return std::all_of(
-                                   variable_indexes.begin(), variable_indexes.end(),
-                                   // 判断依据是，列表中的每一个元素都相同
-                                   [&](std::pair<uint, Pos> i) { return a[i.first] == b[i.first]; });
+                               return std::all_of(variable_indexes.begin(), variable_indexes.end(),
+                                                  // 判断依据是，列表中的每一个元素都相同
+                                                  [&](PlanGenerator::Variable v) {
+                                                      return a[v.priority_] == b[v.priority_];
+                                                  });
                            });
     }
     for (auto it = result.begin(); it != last; ++it) {
         const auto& item = *it;
         for (const auto& idx : variable_indexes) {
-            std::cout << index->ID2String(item[idx.first], idx.second) << " ";
+            std::cout << index->ID2String(item[idx.priority_], idx.position_) << " ";
         }
         cnt++;
         std::cout << "\n";
@@ -91,13 +92,14 @@ void RDFTDAA::Query(const std::string& db_name, const std::string& data_file) {
 
             auto start = std::chrono::high_resolution_clock::now();
             auto parser = std::make_shared<SPARQLParser>(sparql);
-            auto query_plan = std::make_shared<PlanGenerator>(index, parser->TripleList());
+            auto query_plan = std::make_shared<PlanGenerator>(index, parser->TriplePatterns());
             auto plan_end = std::chrono::high_resolution_clock::now();
 
-            auto executor = std::make_shared<QueryExecutor>(index, query_plan, parser->Limit(), index->shared_cnt());
+            auto executor =
+                std::make_shared<QueryExecutor>(index, query_plan, parser->Limit(), index->shared_cnt());
             if (!query_plan->zero_result())
                 executor->Query();
-            
+
             auto projection_start = std::chrono::high_resolution_clock::now();
             uint cnt = QueryResult(executor->result(), index, query_plan, parser);
             auto projection_finish = std::chrono::high_resolution_clock::now();

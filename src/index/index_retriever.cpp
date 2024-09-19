@@ -42,43 +42,50 @@ IndexRetriever::IndexRetriever(std::string db_name) : db_name_(db_name) {
 
     dict_ = Dictionary(db_dictionary_path_);
 
-    std::thread t1([&]() {
-        for (uint id = 1; id <= dict_.shared_cnt(); id++) {
-            if (id % 10 == 0)
-                delete[] dict_.ID2String(id, Pos::kShared);
+    auto build_cache = [&](uint start, uint end) {
+        for (uint id = start; id <= end; id++) {
+            if (id <= shared_cnt()) {
+                if (id % 10 == 0)
+                    delete[] dict_.ID2String(id, SPARQLParser::Term::Positon::kShared);
+            } else if (id <= dict_.shared_cnt() + dict_.subject_cnt()) {
+                if (id % 10 == 0)
+                    delete[] dict_.ID2String(id, SPARQLParser::Term::Positon::kSubject);
+            } else {
+                if (id % 10 == 0)
+                    delete[] dict_.ID2String(id, SPARQLParser::Term::Positon::kObject);
+            }
         }
-    });
-    std::thread t2([&]() {
-        for (uint id = 1; id <= dict_.subject_cnt(); id++) {
-            if (id % 10 == 0)
-                delete[] dict_.ID2String(dict_.shared_cnt() + id, Pos::kSubject);
-        }
-    });
-    std::thread t3([&]() {
-        for (uint id = 1; id <= dict_.object_cnt(); id++) {
-            if (id % 10 == 0)
-                delete[] dict_.ID2String(dict_.shared_cnt() + dict_.subject_cnt() + id, Pos::kObject);
-        }
-    });
+    };
 
-    t1.join();
-    t2.join();
-    t3.join();
+    uint cpu_count = std::thread::hardware_concurrency();
+    uint cnt = dict_.shared_cnt() + dict_.subject_cnt() + dict_.object_cnt();
+    uint batch_size = cnt / cpu_count;
+
+    std::vector<std::thread> threads;
+    for (uint i = 0; i < cpu_count; i++) {
+        uint start = i * batch_size + 1;
+        uint end = (i + 1) * batch_size;
+        threads.emplace_back(std::thread([start, end, &build_cache]() { build_cache(start, end); }));
+    }
+    for (auto& t : threads)
+        t.join();
 
     Init();
-    ps_sets_ = std::vector<std::shared_ptr<Result>>(dict_.predicate_cnt());
+    ps_sets_ = std::vector<std::shared_ptr<std::vector<uint>>>(dict_.predicate_cnt());
     for (auto& set : ps_sets_)
-        set = std::make_shared<Result>();
-    po_sets_ = std::vector<std::shared_ptr<Result>>(dict_.predicate_cnt());
+        set = std::make_shared<std::vector<uint>>();
+    po_sets_ = std::vector<std::shared_ptr<std::vector<uint>>>(dict_.predicate_cnt());
     for (auto& set : po_sets_)
-        set = std::make_shared<Result>();
+        set = std::make_shared<std::vector<uint>>();
 
     LoadCharacteristicSet(subject_characteristic_set_, db_index_path_ + "s_c_sets");
     LoadCharacteristicSet(object_characteristic_set_, db_index_path_ + "o_c_sets");
 
+    max_subject_id_ = dict_.shared_cnt() + dict_.subject_cnt();
+
     auto end = std::chrono::high_resolution_clock::now();
     std::chrono::duration<double, std::milli> diff = end - beg;
-    std::cout << "load db dictionary success. takes " << diff.count() << " ms." << std::endl;
+    std::cout << "init db success. takes " << diff.count() << " ms." << std::endl;
 }
 
 ulong IndexRetriever::FileSize(std::string file_name) {
@@ -192,7 +199,10 @@ uint IndexRetriever::AccessLevels(ulong offset, Order order) {
     }
 }
 
-std::shared_ptr<Result> IndexRetriever::AccessDAA(uint offset, uint daa_start, uint daa_size, Order order) {
+std::shared_ptr<std::vector<uint>> IndexRetriever::AccessDAA(uint offset,
+                                                             uint daa_start,
+                                                             uint daa_size,
+                                                             Order order) {
     uint value;
     uint value_offset;
     MMap<char>& level_end = (order == Order::kSPO) ? spo_.daa_level_end_ : ops_.daa_level_end_;
@@ -202,9 +212,9 @@ std::shared_ptr<Result> IndexRetriever::AccessDAA(uint offset, uint daa_start, u
     value = AccessLevels(value_offset, order);
 
     if (daa_size == 1)
-        return std::make_shared<Result>(new uint[1]{value}, 1);
+        return std::make_shared<std::vector<uint>>(std::vector<uint>{value});
 
-    std::vector<uint>* array = new std::vector<uint>();
+    std::shared_ptr<std::vector<uint>> array = std::make_shared<std::vector<uint>>();
     array->push_back(value);
 
     One one = One(level_end, daa_start, daa_start + daa_size);
@@ -220,7 +230,7 @@ std::shared_ptr<Result> IndexRetriever::AccessDAA(uint offset, uint daa_start, u
         array->push_back(value);
     }
 
-    return std::make_shared<Result>(array->data(), array->size());
+    return array;
 }
 
 void IndexRetriever::Close() {
@@ -240,26 +250,26 @@ void IndexRetriever::Close() {
     ops_.daa_level_end_.CloseMap();
     ops_.daa_array_end_.CloseMap();
 
-    std::vector<std::shared_ptr<Result>>().swap(ps_sets_);
-    std::vector<std::shared_ptr<Result>>().swap(po_sets_);
+    std::vector<std::shared_ptr<std::vector<uint>>>().swap(ps_sets_);
+    std::vector<std::shared_ptr<std::vector<uint>>>().swap(po_sets_);
 
     dict_.Close();
 }
 
-const char* IndexRetriever::ID2String(uint id, Pos pos) {
+const char* IndexRetriever::ID2String(uint id, SPARQLParser::Term::Positon pos) {
     return dict_.ID2String(id, pos);
 }
 
-uint IndexRetriever::String2ID(const std::string& str, Pos pos) {
-    return dict_.String2ID(str, pos);
+uint IndexRetriever::Term2ID(const SPARQLParser::Term& term) {
+    return dict_.String2ID(term.value_, term.position_);
 }
 
 uint IndexRetriever::predicate_cnt() {
     return dict_.predicate_cnt();
 }
 
-std::shared_ptr<Result> IndexRetriever::GetSSet(uint pid) {
-    if (ps_sets_[pid - 1]->Size() == 0) {
+std::shared_ptr<std::vector<uint>> IndexRetriever::GetSSet(uint pid) {
+    if (ps_sets_[pid - 1]->size() == 0) {
         if (predicate_index_compressed_) {
             uint s_array_offset = predicate_index_[(pid - 1) * 4];
             uint s_array_size = predicate_index_[(pid - 1) * 4 + 2] - s_array_offset;
@@ -275,7 +285,8 @@ std::shared_ptr<Result> IndexRetriever::GetSSet(uint pid) {
             for (uint i = 1; i < total_length; i++)
                 recovdata[i] += recovdata[i - 1];
 
-            ps_sets_[pid - 1] = std::make_shared<Result>(recovdata, total_length);
+            // ps_sets_[pid - 1] = std::make_shared<std::vector<uint>>(recovdata, total_length);
+            ps_sets_[pid - 1] = std::make_shared<std::vector<uint>>(recovdata, recovdata + total_length);
         } else {
             uint s_array_offset = predicate_index_[(pid - 1) * 2];
             uint s_array_size = predicate_index_[(pid - 1) * 2 + 1] - s_array_offset;
@@ -284,14 +295,15 @@ std::shared_ptr<Result> IndexRetriever::GetSSet(uint pid) {
             for (uint i = 0; i < s_array_size; i++)
                 set[i] = predicate_index_arrays_no_compress_[s_array_offset + i];
 
-            ps_sets_[pid - 1] = std::make_shared<Result>(set, s_array_size);
+            // ps_sets_[pid - 1] = std::make_shared<std::vector<uint>>(set, s_array_size);
+            ps_sets_[pid - 1] = std::make_shared<std::vector<uint>>(set, set + s_array_size);
         }
     }
     return ps_sets_[pid - 1];
 }
 
 uint IndexRetriever::GetSSetSize(uint pid) {
-    if (ps_sets_[pid - 1]->Size() == 0) {
+    if (ps_sets_[pid - 1]->size() == 0) {
         uint s_array_size;
         if (predicate_index_compressed_) {
             s_array_size = predicate_index_[(pid - 1) * 4 + 1];
@@ -302,11 +314,11 @@ uint IndexRetriever::GetSSetSize(uint pid) {
         return s_array_size;
     }
 
-    return ps_sets_[pid - 1]->Size();
+    return ps_sets_[pid - 1]->size();
 }
 
-std::shared_ptr<Result> IndexRetriever::GetOSet(uint pid) {
-    if (po_sets_[pid - 1]->Size() == 0) {
+std::shared_ptr<std::vector<uint>> IndexRetriever::GetOSet(uint pid) {
+    if (po_sets_[pid - 1]->size() == 0) {
         if (predicate_index_compressed_) {
             uint o_array_offset = predicate_index_[(pid - 1) * 4 + 2];
             uint o_array_size;
@@ -326,8 +338,8 @@ std::shared_ptr<Result> IndexRetriever::GetOSet(uint pid) {
             for (uint i = 1; i < total_length; i++)
                 recovdata[i] += recovdata[i - 1];
 
-            po_sets_[pid - 1] = std::make_shared<Result>(recovdata, total_length);
-
+            // po_sets_[pid - 1] = std::make_shared<std::vector<uint>>(recovdata, total_length);
+            po_sets_[pid - 1] = std::make_shared<std::vector<uint>>(recovdata, recovdata + total_length);
         } else {
             uint o_array_offset = predicate_index_[(pid - 1) * 2 + 1];
             uint o_array_size;
@@ -340,14 +352,15 @@ std::shared_ptr<Result> IndexRetriever::GetOSet(uint pid) {
             for (uint i = 0; i < o_array_size; i++)
                 set[i] = predicate_index_arrays_no_compress_[o_array_offset + i];
 
-            po_sets_[pid - 1] = std::make_shared<Result>(set, o_array_size);
+            // po_sets_[pid - 1] = std::make_shared<std::vector<uint>>(set, o_array_size);
+            po_sets_[pid - 1] = std::make_shared<std::vector<uint>>(set, set + o_array_size);
         }
     }
     return po_sets_[pid - 1];
 }
 
 uint IndexRetriever::GetOSetSize(uint pid) {
-    if (po_sets_[pid - 1]->Size() == 0) {
+    if (po_sets_[pid - 1]->size() == 0) {
         uint o_array_size;
         if (predicate_index_compressed_) {
             o_array_size = predicate_index_[(pid - 1) * 4 + 3];
@@ -360,7 +373,7 @@ uint IndexRetriever::GetOSetSize(uint pid) {
         }
         return o_array_size;
     }
-    return po_sets_[pid - 1]->Size();
+    return po_sets_[pid - 1]->size();
 }
 
 uint IndexRetriever::PSSize(uint pid) {
@@ -371,8 +384,8 @@ uint IndexRetriever::POSize(uint pid) {
     return predicate_index_[(pid - 1) * 4 + 3];
 }
 
-std::shared_ptr<Result> IndexRetriever::GetBySP(uint s, uint p) {
-    if (s <= dict_.shared_cnt() + dict_.subject_cnt()) {
+std::shared_ptr<std::vector<uint>> IndexRetriever::GetBySP(uint s, uint p) {
+    if (s <= max_subject_id_) {
         uint c_set_id = AccessToDAA(spo_, (s - 1) * 2);
         for (uint i = 0; i < subject_characteristic_set_[c_set_id - 1].size(); i++) {
             if (subject_characteristic_set_[c_set_id - 1][i] == p) {
@@ -386,11 +399,11 @@ std::shared_ptr<Result> IndexRetriever::GetBySP(uint s, uint p) {
             }
         }
     }
-    return std::make_shared<Result>();
+    return std::make_shared<std::vector<uint>>();
 }
 
-std::shared_ptr<Result> IndexRetriever::GetByOP(uint o, uint p) {
-    if (o <= dict_.shared_cnt() || dict_.shared_cnt() + dict_.subject_cnt() < o) {
+std::shared_ptr<std::vector<uint>> IndexRetriever::GetByOP(uint o, uint p) {
+    if (o <= dict_.shared_cnt() || max_subject_id_ < o) {
         if (o > dict_.shared_cnt())
             o -= dict_.subject_cnt();
 
@@ -408,15 +421,43 @@ std::shared_ptr<Result> IndexRetriever::GetByOP(uint o, uint p) {
             }
         }
     }
-    return std::make_shared<Result>();
+    return std::make_shared<std::vector<uint>>();
+}
+
+std::shared_ptr<std::vector<uint>> IndexRetriever::GetBySO(uint s, uint o) {
+    if (s <= max_subject_id_ && (o <= dict_.shared_cnt() || max_subject_id_ < o)) {
+        if (o > dict_.shared_cnt())
+            o -= dict_.subject_cnt();
+        uint s_c_set_id = AccessToDAA(spo_, (s - 1) * 2);
+        uint o_c_set_id = AccessToDAA(ops_, (o - 1) * 2);
+        std::vector<uint>& s_c_set = subject_characteristic_set_[s_c_set_id - 1];
+        std::vector<uint>& o_c_set = object_characteristic_set_[o_c_set_id - 1];
+
+        // std::vector<uint>* result = new std::vector<uint>();
+        std::shared_ptr<std::vector<uint>> result = std::make_shared<std::vector<uint>>();
+
+        for (uint i = 0; i < s_c_set.size(); i++) {
+            for (uint j = 0; j < o_c_set.size(); j++) {
+                if (s_c_set[i] == o_c_set[i]) {
+                    result->push_back(s_c_set[i]);
+                }
+            }
+        }
+        return result;
+    }
+    return std::make_shared<std::vector<uint>>();
 }
 
 uint IndexRetriever::GetBySPSize(uint s, uint p) {
-    return GetBySP(s, p)->Size();
+    return GetBySP(s, p)->size();
 }
 
 uint IndexRetriever::GetByOPSize(uint o, uint p) {
-    return GetByOP(o, p)->Size();
+    return GetByOP(o, p)->size();
+}
+
+uint IndexRetriever::GetBySOSize(uint s, uint o) {
+    return GetBySO(s, o)->size();
 }
 
 uint IndexRetriever::shared_cnt() {

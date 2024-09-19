@@ -30,7 +30,7 @@ class QueryExecutor {
     std::shared_ptr<IndexRetriever> index_;
     std::vector<std::vector<size_t>>& other_type_;
     std::vector<std::vector<size_t>>& none_type_;
-    std::vector<std::vector<std::shared_ptr<Result>>>& prestores_;
+    std::vector<std::vector<std::shared_ptr<std::vector<uint>>>>& prestores_;
     uint limit_;
     uint shared_cnt_;
     std::chrono::duration<double, std::milli> query_duration_;

@@ -11,7 +11,7 @@
 #include "rdf-tdaa/utils/result_list.hpp"
 #include "streamvbyte.h"
 
-using Result = ResultList::Result;
+// using Result = ResultList::Result;
 
 class One {
     MMap<char>& bits_;
@@ -56,11 +56,13 @@ class IndexRetriever {
     MMap<uint> predicate_index_;
     MMap<uint> predicate_index_arrays_no_compress_;
     MMap<uint8_t> predicate_index_arrays_;
-    std::vector<std::shared_ptr<Result>> ps_sets_;
-    std::vector<std::shared_ptr<Result>> po_sets_;
+    std::vector<std::shared_ptr<std::vector<uint>>> ps_sets_;
+    std::vector<std::shared_ptr<std::vector<uint>>> po_sets_;
 
     std::vector<std::vector<uint>> subject_characteristic_set_;
     std::vector<std::vector<uint>> object_characteristic_set_;
+
+    ulong max_subject_id_;
 
     ulong FileSize(std::string file_name);
 
@@ -74,7 +76,7 @@ class IndexRetriever {
 
     uint AccessLevels(ulong offset, Order order);
 
-    std::shared_ptr<Result> AccessDAA(uint offset, uint daa_start, uint daa_size, Order order);
+    std::shared_ptr<std::vector<uint>> AccessDAA(uint offset, uint daa_start, uint daa_size, Order order);
 
    public:
     IndexRetriever();
@@ -83,17 +85,17 @@ class IndexRetriever {
 
     void Close();
 
-    const char* ID2String(uint id, Pos pos);
+    const char* ID2String(uint id, SPARQLParser::Term::Positon pos);
 
-    uint String2ID(const std::string& str, Pos pos);
+    uint Term2ID(const SPARQLParser::Term& term);
 
     uint predicate_cnt();
 
-    std::shared_ptr<Result> GetSSet(uint pid);
+    std::shared_ptr<std::vector<uint>> GetSSet(uint pid);
 
     uint GetSSetSize(uint pid);
 
-    std::shared_ptr<Result> GetOSet(uint pid);
+    std::shared_ptr<std::vector<uint>> GetOSet(uint pid);
 
     uint GetOSetSize(uint pid);
 
@@ -101,13 +103,17 @@ class IndexRetriever {
 
     uint POSize(uint pid);
 
-    std::shared_ptr<Result> GetBySP(uint s, uint p);
+    std::shared_ptr<std::vector<uint>> GetBySP(uint s, uint p);
 
-    std::shared_ptr<Result> GetByOP(uint o, uint p);
+    std::shared_ptr<std::vector<uint>> GetByOP(uint o, uint p);
+
+    std::shared_ptr<std::vector<uint>> GetBySO(uint s, uint o);
 
     uint GetBySPSize(uint s, uint p);
 
     uint GetByOPSize(uint o, uint p);
+
+    uint GetBySOSize(uint s, uint o);
 
     uint shared_cnt();
 };

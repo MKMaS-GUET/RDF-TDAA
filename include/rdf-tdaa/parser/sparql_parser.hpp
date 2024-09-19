@@ -1,14 +1,14 @@
 #ifndef SPARQL_PARSER_HPP
 #define SPARQL_PARSER_HPP
 
+#include <stdint.h>
 #include <exception>
+#include <set>
 #include <sstream>
 #include <string>
 #include <unordered_map>
 #include <utility>
-#include <set>
 #include <vector>
-#include <stdint.h>
 
 #include "rdf-tdaa/parser/sparql_lexer.hpp"
 
@@ -26,28 +26,33 @@ class SPARQLParser {
         [[nodiscard]] std::string to_string() const;
     };
 
-    struct TriplePatternElem {
-        enum Type { Variable, IRI, Literal, Blank };
-        enum LiteralType { Integer, Double, String, Function, None };
+    struct Term {
+        enum Type { kVariable, kIRI, kLiteral, kBlank };
+        enum ValueType { kInteger, kDouble, kString, kFunction, kNone };
+        enum Positon { kSubject, kPredicate, kObject, kShared };
 
         Type type_;
-        LiteralType literal_type_;
+        ValueType literal_type_;
         std::string value_;
+        Positon position_;
 
-        TriplePatternElem();
+        Term();
 
-        TriplePatternElem(Type type, LiteralType literal_type, std::string value);
+        Term(Type type, ValueType value_type, std::string value);
+
+        bool IsVariable() const;
     };
 
     struct TriplePattern {
-        TriplePatternElem subj_;
-        TriplePatternElem pred_;
-        TriplePatternElem obj_;
+        Term subject_;
+        Term predicate_;
+        Term object_;
         bool is_option_;
+        uint variale_cnt_;
 
-        TriplePattern(TriplePatternElem subj, TriplePatternElem pred, TriplePatternElem obj, bool is_option);
+        TriplePattern(Term subject, Term predicate, Term object, bool is_option, uint variale_cnt);
 
-        TriplePattern(TriplePatternElem subj, TriplePatternElem pred, TriplePatternElem obj);
+        TriplePattern(Term subject, Term predicate, Term object);
     };
 
     // TODO: Filter need to be imporoved
@@ -56,7 +61,7 @@ class SPARQLParser {
         Type filter_type_;
         std::string variable_str_;
         // if Type == Function then filter_args[0] is functions_register_name
-        std::vector<TriplePatternElem> filter_args_;
+        std::vector<Term> filter_args_;
     };
 
     struct ProjectModifier {
@@ -94,19 +99,19 @@ class SPARQLParser {
 
     void ParseLimit();
 
-    TriplePatternElem MakeVariable(std::string variable);
+    Term MakeVariable(std::string variable);
 
-    TriplePatternElem MakeIRI(std::string IRI);
+    Term MakeIRI(std::string IRI);
 
-    TriplePatternElem MakeIntegerLiteral(std::string literal);
+    Term MakeIntegerLiteral(std::string literal);
 
-    TriplePatternElem MakeDoubleLiteral(std::string literal);
+    Term MakeDoubleLiteral(std::string literal);
 
-    TriplePatternElem MakeNoTypeLiteral(std::string literal);
+    Term MakeNoTypeLiteral(std::string literal);
 
-    TriplePatternElem MakeStringLiteral(const std::string& literal);
+    Term MakeStringLiteral(const std::string& literal);
 
-    TriplePatternElem MakeFunctionLiteral(std::string literal);
+    Term MakeFunctionLiteral(std::string literal);
 
    public:
     explicit SPARQLParser(const SPARQLLexer& sparql_lexer);

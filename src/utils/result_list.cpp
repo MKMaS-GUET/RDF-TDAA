@@ -1,83 +1,10 @@
 #include "rdf-tdaa/utils/result_list.hpp"
 
-ResultList::Result::Iterator::Iterator() : ptr_(nullptr) {}
-
-ResultList::Result::Iterator::Iterator(uint* p) : ptr_(p) {}
-
-ResultList::Result::Iterator::Iterator(const Iterator& it) : ptr_(it.ptr_) {}
-
-ResultList::Result::Iterator& ResultList::Result::Iterator::operator++() {
-    ++ptr_;
-    return *this;
-}
-
-ResultList::Result::Iterator ResultList::Result::Iterator::operator++(int) {
-    Iterator tmp(*this);
-    operator++();
-    return tmp;
-}
-
-uint ResultList::Result::Iterator::operator-(Result::Iterator r_it) {
-    return ptr_ - r_it.ptr_;
-}
-
-ResultList::Result::Iterator ResultList::Result::Iterator::operator-(int num) {
-    return Iterator(ptr_ - num);
-}
-
-ResultList::Result::Iterator ResultList::Result::Iterator::operator+(int num) {
-    return Iterator(ptr_ + num);
-}
-
-bool ResultList::Result::Iterator::operator==(const Iterator& rhs) const {
-    return ptr_ == rhs.ptr_;
-}
-
-bool ResultList::Result::Iterator::operator!=(const Iterator& rhs) const {
-    return ptr_ != rhs.ptr_;
-}
-
-bool ResultList::Result::Iterator::operator<(const Iterator& rhs) const {
-    return ptr_ < rhs.ptr_;
-}
-
-uint& ResultList::Result::Iterator::operator*() {
-    return *ptr_;
-}
-
-ResultList::Result::Result() : start_(nullptr), size_(0) {}
-
-ResultList::Result::Result(uint* start, uint size) : start_(start), size_(size) {}
-
-ResultList::Result::~Result() {
-    delete[] start_;
-    start_ = nullptr;
-}
-
-ResultList::Result::Iterator ResultList::Result::Begin() {
-    return Iterator(start_);
-}
-
-ResultList::Result::Iterator ResultList::Result::End() {
-    return Iterator(start_ + size_);
-}
-
-uint& ResultList::Result::operator[](uint i) {
-    if (i >= 0 && i < size_) {
-        return *(start_ + i);
-    }
-    return *start_;
-}
-
-uint ResultList::Result::Size() {
-    return size_;
-}
-
 ResultList::ResultList() {
-    results_ = std::vector<std::shared_ptr<Result>>();
+    results_ = std::vector<std::shared_ptr<std::vector<uint>>>();
 }
 
-void ResultList::AddVector(std::shared_ptr<Result> range) {
+void ResultList::AddVector(std::shared_ptr<std::vector<uint>> range) {
     if (results_.size() == 0) {
         results_.push_back(range);
         return;
@@ -94,21 +21,22 @@ void ResultList::AddVector(std::shared_ptr<Result> range) {
     results_.push_back(range);
 }
 
-bool ResultList::AddVectors(std::vector<std::shared_ptr<Result>> ranges) {
-    for (std::vector<std::shared_ptr<Result>>::iterator it = ranges.begin(); it != ranges.end(); it++) {
-        if ((*it)->Size() == 0)
+bool ResultList::AddVectors(std::vector<std::shared_ptr<std::vector<uint>>> ranges) {
+    for (std::vector<std::shared_ptr<std::vector<uint>>>::iterator it = ranges.begin(); it != ranges.end();
+         it++) {
+        if ((*it)->size() == 0)
             return 0;
         AddVector(*it);
     }
     return 1;
 }
 
-std::shared_ptr<ResultList::Result> ResultList::Shortest() {
+std::shared_ptr<std::vector<uint>> ResultList::Shortest() {
     long unsigned int min_i = 0;
-    long unsigned int min = results_[0]->Size();
+    long unsigned int min = results_[0]->size();
     for (long unsigned int i = 0; i < results_.size(); i++) {
-        if (results_[i]->Size() < min) {
-            min = results_[i]->Size();
+        if (results_[i]->size() < min) {
+            min = results_[i]->size();
             min_i = i;
         }
     }
@@ -117,15 +45,15 @@ std::shared_ptr<ResultList::Result> ResultList::Shortest() {
 
 void ResultList::UpdateCurrentPostion() {
     for (long unsigned int i = 0; i < results_.size(); i++) {
-        vector_current_pos_.push_back(results_[i]->Begin());
+        vector_current_pos_.push_back(results_[i]->begin());
     }
 }
 
 void ResultList::Seek(int i, uint val) {
-    std::shared_ptr<Result> p_r = results_[i];
+    std::shared_ptr<std::vector<uint>> p_r = results_[i];
 
     auto it = vector_current_pos_[i];
-    auto end = p_r->End();
+    auto end = p_r->end();
     for (; it < end; it = it + 2) {
         if (*it >= val) {
             if (*(it - 1) >= val) {
@@ -153,13 +81,13 @@ void ResultList::NextVal(int i) {
     vector_current_pos_[i]++;
 }
 
-std::shared_ptr<ResultList::Result> ResultList::GetRangeByIndex(int i) {
+std::shared_ptr<std::vector<uint>> ResultList::GetRangeByIndex(int i) {
     return results_[i];
 }
 
 bool ResultList::HasEmpty() {
     for (long unsigned int i = 0; i < results_.size(); i++) {
-        if (results_[i]->Size() == 0) {
+        if (results_[i]->size() == 0) {
             return true;
         }
     }
@@ -167,8 +95,8 @@ bool ResultList::HasEmpty() {
 }
 
 bool ResultList::AtEnd(int i) {
-    std::shared_ptr<Result> p_r = results_[i];
-    return vector_current_pos_[i] == p_r->End();
+    std::shared_ptr<std::vector<uint>> p_r = results_[i];
+    return vector_current_pos_[i] == p_r->end();
 }
 
 void ResultList::Clear() {

@@ -9,15 +9,14 @@
 #include <iostream>
 #include <variant>
 #include <vector>
-#include "rdf-tdaa/utils/vbyte.hpp"
-
+#include "rdf-tdaa/parser/sparql_parser.hpp"
 #include "rdf-tdaa/utils/mmap.hpp"
+#include "rdf-tdaa/utils/vbyte.hpp"
 
 template <typename Key, typename Value>
 using hash_map = phmap::flat_hash_map<Key, Value>;
 
 enum Order { kSPO, kOPS };
-enum Pos { kSubject, kPredicate, kObject, kShared };
 enum Map { kSubjectMap, kPredicateMap, kObjectMap, kSharedMap };
 
 class Dictionary {
@@ -99,9 +98,9 @@ class Dictionary {
 
     void Close();
 
-    const char* ID2String(uint id, Pos pos);
+    const char* ID2String(uint id, SPARQLParser::Term::Positon pos);
 
-    uint String2ID(const std::string& str, Pos pos);
+    uint String2ID(const std::string& str, SPARQLParser::Term::Positon pos);
 
     uint subject_cnt();
 
