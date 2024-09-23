@@ -1,4 +1,8 @@
 #include "rdf-tdaa/server/server.hpp"
+#include "rapidjson/writer.h"
+#include "rdf-tdaa/parser/sparql_parser.hpp"
+#include "rdf-tdaa/query/plan_generator.hpp"
+#include "rdf-tdaa/query/query_executor.hpp"
 
 void Endpoint::query(const httplib::Request& req, httplib::Response& res) {
     std::string sparql = req.get_param_value("query");
@@ -7,7 +11,10 @@ void Endpoint::query(const httplib::Request& req, httplib::Response& res) {
         auto exec_start = std::chrono::high_resolution_clock::now();
 
         auto parser = std::make_shared<SPARQLParser>(sparql);
-        auto query_plan = std::make_shared<PlanGenerator>(db_index, parser->TriplePatterns());
+
+        auto triple_partterns =
+            std::make_shared<std::vector<SPARQLParser::TriplePattern>>(parser->TriplePatterns());
+        auto query_plan = std::make_shared<PlanGenerator>(db_index, triple_partterns);
         auto executor =
             std::make_shared<QueryExecutor>(db_index, query_plan, parser->Limit(), db_index->shared_cnt());
         if (!query_plan->zero_result())

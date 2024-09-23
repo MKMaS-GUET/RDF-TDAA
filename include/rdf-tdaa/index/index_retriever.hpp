@@ -7,11 +7,11 @@
 #include <thread>
 #include <vector>
 #include "rdf-tdaa/dictionary/dictionary.hpp"
+#include "rdf-tdaa/utils/join_list.hpp"
 #include "rdf-tdaa/utils/mmap.hpp"
-#include "rdf-tdaa/utils/result_list.hpp"
 #include "streamvbyte.h"
 
-// using Result = ResultList::Result;
+#define get_bit(bits, offset) ((((bits)[(offset) / 8] >> (7 - (offset) % 8)) & 1))
 
 class One {
     MMap<char>& bits_;
@@ -72,11 +72,13 @@ class IndexRetriever {
 
     uint AccessBitSequence(MMap<uint>& bits, uint data_width, ulong bit_start);
 
+    std::shared_ptr<std::vector<uint>> AccessAllArrays(DAA& daa, uint daa_start, uint daa_size);
+
     uint AccessToDAA(DAA& daa, ulong offset);
 
-    uint AccessLevels(ulong offset, Order order);
+    uint AccessLevels(DAA& daa, ulong offset);
 
-    std::shared_ptr<std::vector<uint>> AccessDAA(uint offset, uint daa_start, uint daa_size, Order order);
+    std::shared_ptr<std::vector<uint>> AccessDAA(DAA& daa, uint offset, uint daa_start, uint daa_size);
 
    public:
     IndexRetriever();
@@ -89,31 +91,41 @@ class IndexRetriever {
 
     uint Term2ID(const SPARQLParser::Term& term);
 
-    uint predicate_cnt();
+    std::pair<uint, uint> FetchDAABounds(DAA& daa, uint id);
 
     std::shared_ptr<std::vector<uint>> GetSSet(uint pid);
 
-    uint GetSSetSize(uint pid);
-
     std::shared_ptr<std::vector<uint>> GetOSet(uint pid);
+
+    std::shared_ptr<std::vector<uint>> GetSPreSet(uint sid);
+
+    std::shared_ptr<std::vector<uint>> GetOPreSet(uint oid);
+
+    std::shared_ptr<std::vector<uint>> GetByS(uint sid);
+
+    std::shared_ptr<std::vector<uint>> GetByO(uint oid);
+
+    std::shared_ptr<std::vector<uint>> GetBySP(uint sid, uint pid);
+
+    std::shared_ptr<std::vector<uint>> GetByOP(uint oid, uint pid);
+
+    std::shared_ptr<std::vector<uint>> GetBySO(uint sid, uint oid);
+
+    uint GetSSetSize(uint pid);
 
     uint GetOSetSize(uint pid);
 
-    uint PSSize(uint pid);
+    uint GetBySSize(uint sid);
 
-    uint POSize(uint pid);
+    uint GetByOSize(uint oid);
 
-    std::shared_ptr<std::vector<uint>> GetBySP(uint s, uint p);
+    uint GetBySPSize(uint sid, uint pid);
 
-    std::shared_ptr<std::vector<uint>> GetByOP(uint o, uint p);
+    uint GetByOPSize(uint oid, uint pid);
 
-    std::shared_ptr<std::vector<uint>> GetBySO(uint s, uint o);
+    uint GetBySOSize(uint sid, uint oid);
 
-    uint GetBySPSize(uint s, uint p);
-
-    uint GetByOPSize(uint o, uint p);
-
-    uint GetBySOSize(uint s, uint o);
+    uint predicate_cnt();
 
     uint shared_cnt();
 };

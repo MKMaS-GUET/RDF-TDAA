@@ -1,7 +1,6 @@
 #ifndef QUERY_EXECUTOR_HPP
 #define QUERY_EXECUTOR_HPP
 
-// #include <parallel_hashmap/phmap.h>
 #include <chrono>
 #include <string>
 #include <vector>
@@ -9,13 +8,16 @@
 #include "rdf-tdaa/query/plan_generator.hpp"
 
 class QueryExecutor {
+    using Ptype = PlanGenerator::Item::PType;
+    using Rtype = PlanGenerator::Item::RType;
+
     struct Stat {
         bool at_end_;
         int level_;
         // 用于记录每一个 level_ 的 candidate_result_ 已经处理过的结果的 id
-        std::vector<uint> indices_;
         std::vector<uint> current_tuple_;
-        std::vector<std::shared_ptr<std::vector<uint>>> candidate_result_;
+        std::vector<std::shared_ptr<std::vector<uint>>> candidate_value_;
+        std::vector<uint> candidate_indices_;
         std::vector<std::vector<uint>> result_;
         std::vector<std::vector<PlanGenerator::Item>> plan_;
 
@@ -28,17 +30,15 @@ class QueryExecutor {
 
     Stat stat_;
     std::shared_ptr<IndexRetriever> index_;
-    std::vector<std::vector<size_t>>& other_type_;
-    std::vector<std::vector<size_t>>& none_type_;
-    std::vector<std::vector<std::shared_ptr<std::vector<uint>>>>& prestores_;
+    std::vector<std::vector<uint>>& filled_item_indices_;
+    std::vector<std::vector<uint>>& empty_item_indices_;
+    std::vector<std::vector<std::shared_ptr<std::vector<uint>>>>& univariate_results_;
+    std::vector<std::shared_ptr<std::vector<uint>>> pre_join_;
     uint limit_;
     uint shared_cnt_;
     std::chrono::duration<double, std::milli> query_duration_;
 
-    // hash_map<std::string, std::shared_ptr<std::vector<uint>>> _pre_join_result;
-    std::vector<std::shared_ptr<std::vector<uint>>> _pre_join_result;
-
-    std::shared_ptr<std::vector<uint>> LeapfrogJoin(ResultList& indexes);
+    std::shared_ptr<std::vector<uint>> static LeapfrogJoin(JoinList& lists);
 
     bool PreJoin();
 
@@ -48,13 +48,16 @@ class QueryExecutor {
 
     void Next(Stat& stat);
 
-    void EnumerateItems(Stat& stat);
+    void GenCondidateValue(Stat& stat);
 
     bool UpdateCurrentTuple(Stat& stat);
 
-    bool SearchPredicatePath(Stat& stat, uint entity);
+    bool FillEmptyItem(Stat& stat, uint entity);
 
    public:
+    std::shared_ptr<std::vector<uint>> static LeapfrogJoin(
+        std::vector<std::shared_ptr<std::vector<uint>>>& lists);
+
     QueryExecutor(std::shared_ptr<IndexRetriever> index,
                   std::shared_ptr<PlanGenerator>& plan,
                   uint limit,

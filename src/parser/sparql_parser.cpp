@@ -1,4 +1,5 @@
 #include "rdf-tdaa/parser/sparql_parser.hpp"
+#include <iostream>
 
 SPARQLParser::ParserException::ParserException(std::string message) : message_(std::move(message)) {}
 
@@ -319,12 +320,13 @@ SPARQLParser::Term SPARQLParser::MakeNoTypeLiteral(std::string literal) {
 }
 
 SPARQLParser::Term SPARQLParser::MakeStringLiteral(const std::string& literal) {
-    size_t literal_len = literal.size();
-    std::string cleaned_literal;
-    if (literal_len > 2) {
-        cleaned_literal = literal.substr(1, literal_len - 2);
-    }
-    return {Term::Type::kLiteral, Term::ValueType::kString, cleaned_literal};
+    // size_t literal_len = literal.size();
+    // std::string cleaned_literal;
+    // if (literal_len > 2) {
+    //     cleaned_literal = literal.substr(1, literal_len - 2);
+    // }
+    // return {Term::Type::kLiteral, Term::ValueType::kString, cleaned_literal};
+    return {Term::Type::kLiteral, Term::ValueType::kString, literal};
 }
 
 SPARQLParser::Term SPARQLParser::MakeFunctionLiteral(std::string literal) {

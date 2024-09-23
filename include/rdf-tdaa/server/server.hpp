@@ -10,11 +10,7 @@
 #include <unordered_set>
 #include <utility>
 
-#include "rapidjson/writer.h"
-#include "rdf-tdaa/index/index_builder.hpp"
-#include "rdf-tdaa/parser/sparql_parser.hpp"
-#include "rdf-tdaa/query/plan_generator.hpp"
-#include "rdf-tdaa/query/query_executor.hpp"
+#include "rdf-tdaa/index/index_retriever.hpp"
 
 class Endpoint {
    public:

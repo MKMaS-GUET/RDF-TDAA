@@ -9,7 +9,7 @@
 #include <vector>
 
 #include "rdf-tdaa/index/index_retriever.hpp"
-#include "rdf-tdaa/utils/result_list.hpp"
+#include "rdf-tdaa/utils/join_list.hpp"
 
 // using Result = ResultList::Result;
 using AdjacencyList = std::unordered_map<std::string, std::vector<std::pair<std::string, uint>>>;
@@ -17,13 +17,16 @@ using AdjacencyList = std::unordered_map<std::string, std::vector<std::pair<std:
 class PlanGenerator {
    public:
     struct Item {
-        enum TypeT { kPS, kPO, kNone };
-        TypeT search_type_;            // mark the current search type
-        uint search_code_;             // search this code from corresponding index according to
-                                       // `curr_search_type_`
-        size_t candidate_result_idx_;  // the next value location index
-        // 一对迭代器，第一个是起始位置，第二个是结束位置
-        std::shared_ptr<std::vector<uint>> search_result_;
+        enum RType { kSP, kOP, kSO, kNone };
+        enum PType { kPreSub, kPreObj, kSubject, kPredicate, kObject, kEmpty };
+
+        RType retrieval_type_;
+        PType prestore_type_;
+        std::shared_ptr<std::vector<uint>> index_result_;
+
+        uint triple_pattern_id_;
+        uint search_id_;
+        uint empty_item_level_;
 
         Item() = default;
 
@@ -45,17 +48,19 @@ class PlanGenerator {
     };
 
    private:
+    std::shared_ptr<IndexRetriever>& index_;
+    std::shared_ptr<std::vector<SPARQLParser::TriplePattern>> triple_partterns_;
     std::vector<Variable> variable_order_;
     hash_map<std::string, Variable*> value2variable_;
     std::vector<std::vector<Item>> query_plan_;
-    std::vector<std::vector<size_t>> other_type_;
-    std::vector<std::vector<size_t>> none_type_;
-    std::vector<std::vector<std::shared_ptr<std::vector<uint>>>> prestores_;
+    std::vector<std::vector<uint>> filled_item_indices_;
+    std::vector<std::vector<uint>> empty_item_indices_;
+    std::vector<std::vector<std::shared_ptr<std::vector<uint>>>> univariate_results_;
     bool zero_result_ = false;
 
    public:
-    PlanGenerator(const std::shared_ptr<IndexRetriever>& index,
-                  const std::vector<SPARQLParser::TriplePattern>& triple_partterns);
+    PlanGenerator(std::shared_ptr<IndexRetriever>& index,
+                  std::shared_ptr<std::vector<SPARQLParser::TriplePattern>>& triple_partterns);
 
     void DFS(const AdjacencyList& graph,
              std::string vertex,
@@ -67,20 +72,18 @@ class PlanGenerator {
     std::vector<std::vector<std::string>> FindAllPathsInGraph(const AdjacencyList& graph,
                                                               const std::string& root);
 
-    void Generate(const std::shared_ptr<IndexRetriever>& index,
-                  const std::vector<SPARQLParser::TriplePattern>& triple_partterns);
+    void Generate();
 
-    void GenPlanTable(const std::shared_ptr<IndexRetriever>& index,
-                      const std::vector<SPARQLParser::TriplePattern>& triple_partterns);
+    void GenPlanTable();
 
     std::vector<Variable> MappingVariable(const std::vector<std::string>& variables);
 
     std::vector<std::vector<Item>>& query_plan();
     hash_map<std::string, Variable*>& value2variable();
-    std::vector<std::vector<size_t>>& other_type();
-    std::vector<std::vector<size_t>>& none_type();
-    std::vector<std::vector<std::shared_ptr<std::vector<uint>>>>& prestores();
+    std::vector<std::vector<uint>>& filled_item_indices();
+    std::vector<std::vector<uint>>& empty_item_indices();
+    std::vector<std::vector<std::shared_ptr<std::vector<uint>>>>& univariate_results();
     bool zero_result();
 };
 
-#endif  // COMBINED_CODE_INDEX_GEN_PLAN_HPP
+#endif

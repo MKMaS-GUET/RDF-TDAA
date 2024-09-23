@@ -1,24 +1,26 @@
-#ifndef RESULT_LIST_HPP
-#define RESULT_LIST_HPP
+#ifndef JOIN_LIST_HPP
+#define JOIN_LIST_HPP
 
 #include <iterator>
 #include <memory>
 #include <string>
 #include <vector>
 
-class ResultList {
+class JoinList {
    public:
    private:
-    std::vector<std::shared_ptr<std::vector<uint>>> results_;
+    std::vector<std::shared_ptr<std::vector<uint>>> lists_;
 
     std::vector<std::vector<uint>::iterator> vector_current_pos_;
 
    public:
-    ResultList();
+    JoinList();
 
-    void AddVector(std::shared_ptr<std::vector<uint>> range);
+    JoinList(std::vector<std::shared_ptr<std::vector<uint>>>& lists);
 
-    bool AddVectors(std::vector<std::shared_ptr<std::vector<uint>>> ranges);
+    void AddVector(std::shared_ptr<std::vector<uint>>& list);
+
+    void AddVectors(std::vector<std::shared_ptr<std::vector<uint>>>& lists);
 
     std::shared_ptr<std::vector<uint>> Shortest();
 
