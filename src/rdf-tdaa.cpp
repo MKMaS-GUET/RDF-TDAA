@@ -15,9 +15,8 @@ uint QueryResult(std::vector<std::vector<uint>>& result,
     // project_variables 是要输出的变量顺序
     // 而 result 的变量顺序是计划生成中的变量排序
     // 所以要获取每一个要输出的变量在 result 中的位置
-    for (uint i = 0; i < parser->ProjectVariables().size(); i++) {
+    for (uint i = 0; i < parser->ProjectVariables().size(); i++)
         std::cout << parser->ProjectVariables()[i] << " ";
-    }
     std::cout << std::endl;
 
     if (query_plan->zero_result())
@@ -27,6 +26,22 @@ uint QueryResult(std::vector<std::vector<uint>>& result,
 
     uint cnt = 0;
     if (modifier.modifier_type_ == SPARQLParser::ProjectModifier::Distinct) {
+        uint variable_cnt = query_plan->value2variable().size();
+
+        if (variable_cnt != variable_indexes.size()) {
+            std::vector<uint> not_projection_variable_index;
+            for (uint i = 0; i < variable_cnt; i++)
+                not_projection_variable_index.push_back(i);
+            for (const auto& idx : variable_indexes)
+                not_projection_variable_index.erase(not_projection_variable_index.begin() + idx.priority_);
+
+            for (uint result_id = 0; result_id < result.size(); result_id++) {
+                for (const auto& idx : not_projection_variable_index)
+                    result[result_id][idx] = 0;
+            }
+            std::sort(result.begin(), result.end());
+        }
+
         last = std::unique(result.begin(), result.end(),
                            // 判断两个列表 a 和 b 是否相同，
                            [&](const std::vector<uint>& a, const std::vector<uint>& b) {
@@ -44,7 +59,7 @@ uint QueryResult(std::vector<std::vector<uint>>& result,
             std::cout << index->ID2String(item[idx.priority_], idx.position_) << " ";
         }
         cnt++;
-        std::cout << "\n";
+        std::cout << std::endl;
     }
 
     return cnt;
@@ -94,7 +109,7 @@ void RDFTDAA::Query(const std::string& db_name, const std::string& data_file) {
             auto parser = std::make_shared<SPARQLParser>(sparql);
             auto triple_partterns =
                 std::make_shared<std::vector<SPARQLParser::TriplePattern>>(parser->TriplePatterns());
-            
+
             auto query_plan = std::make_shared<PlanGenerator>(index, triple_partterns);
             auto plan_end = std::chrono::high_resolution_clock::now();
 

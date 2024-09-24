@@ -9,6 +9,8 @@ JoinList::JoinList(std::vector<std::shared_ptr<std::vector<uint>>>& lists) {
 }
 
 void JoinList::AddVector(std::shared_ptr<std::vector<uint>>& list) {
+    if (list->size() == 0)
+        return;
     if (lists_.size() == 0) {
         lists_.push_back(list);
         return;

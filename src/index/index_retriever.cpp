@@ -485,11 +485,15 @@ std::shared_ptr<std::vector<uint>> IndexRetriever::GetByOP(uint oid, uint pid) {
 std::shared_ptr<std::vector<uint>> IndexRetriever::GetBySO(uint sid, uint oid) {
     std::shared_ptr<std::vector<uint>> result = std::make_shared<std::vector<uint>>();
 
+    // 796
+    // <http://www.w3.org/1999/02/22-rdf-syntax-ns#type>
     if ((0 < sid && sid <= max_subject_id_) && (oid <= dict_.shared_cnt() || max_subject_id_ < oid)) {
+        uint ops_daa_offset = (oid - 1) * 2;
         if (oid > dict_.shared_cnt())
-            oid -= dict_.subject_cnt();
+            ops_daa_offset = (oid - dict_.subject_cnt() - 1) * 2;
+
         uint s_c_set_id = AccessToDAA(spo_, (sid - 1) * 2);
-        uint o_c_set_id = AccessToDAA(ops_, (oid - 1) * 2);
+        uint o_c_set_id = AccessToDAA(ops_, ops_daa_offset);
         std::vector<uint>& s_c_set = subject_characteristic_set_[s_c_set_id - 1];
         std::vector<uint>& o_c_set = object_characteristic_set_[o_c_set_id - 1];
 
@@ -515,6 +519,7 @@ std::shared_ptr<std::vector<uint>> IndexRetriever::GetByS(uint sid) {
         auto [daa_offset, daa_size] = FetchDAABounds(spo_, sid);
         result = AccessAllArrays(spo_, daa_offset, daa_size);
         std::sort(result->begin(), result->end());
+        result->erase(std::unique(result->begin(), result->end()), result->end());
         return result;
     }
     return result;
@@ -530,6 +535,7 @@ std::shared_ptr<std::vector<uint>> IndexRetriever::GetByO(uint oid) {
         auto [daa_offset, daa_size] = FetchDAABounds(ops_, oid);
         result = AccessAllArrays(ops_, daa_offset, daa_size);
         std::sort(result->begin(), result->end());
+        result->erase(std::unique(result->begin(), result->end()), result->end());
     }
     return result;
 }

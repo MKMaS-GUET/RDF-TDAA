@@ -114,9 +114,11 @@ void PlanGenerator::Generate() {
 
         uint size = 0;
         std::string v_value;
+
         if (s.IsVariable() && !p.IsVariable() && !o.IsVariable()) {
             v_value = s.value_;
             size = index_->GetByOPSize(index_->Term2ID(o), index_->Term2ID(p));
+            // std::cout << o.value_ << " " << index_->Term2ID(o) << " " << size << std::endl;
         }
         if (!s.IsVariable() && p.IsVariable() && !o.IsVariable()) {
             v_value = p.value_;
@@ -126,6 +128,7 @@ void PlanGenerator::Generate() {
             v_value = o.value_;
             size = index_->GetBySPSize(index_->Term2ID(s), index_->Term2ID(p));
         }
+
         if (triple_parttern.variale_cnt_ == 1) {
             if (size == 0) {
                 zero_result_ = true;
@@ -172,8 +175,8 @@ void PlanGenerator::Generate() {
             vertex1 = s.value_;
             vertex2 = p.value_;
             edge = index_->Term2ID(o);
-            size1 = index_->GetOPreSet(edge)->size();
-            size2 = index_->GetByOSize(edge);
+            size1 = index_->GetByOSize(edge);
+            size2 = index_->GetOPreSet(edge)->size();
         }
 
         if (triple_parttern.variale_cnt_ == 2) {
@@ -296,7 +299,7 @@ void PlanGenerator::Generate() {
                 };
             }
         }
-    } else {
+    } else if (allPaths.size()) {
         phmap::flat_hash_set<std::string> exist_variables;
         for (auto& v : allPaths[longest_path]) {
             exist_variables.insert(v);

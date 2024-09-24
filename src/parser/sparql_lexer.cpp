@@ -55,18 +55,18 @@ SPARQLLexer::TokenT SPARQLLexer::GetNextTokenType() {
             case '_':
                 token_stop_pos_ = current_pos_;
                 return TokenT::kUnderscore;
-            case '@':
-                token_stop_pos_ = current_pos_;
-                return TokenT::kAt;
-                //                case '+':
-                //                    token_stop_pos_ = current_pos_;
-                //                    return TokenT::kPlus;
-                //                case '-':
-                //                    token_stop_pos_ = current_pos_;
-                //                    return TokenT::kMinus;
-                //                case '/':
-                //                    token_stop_pos_ = current_pos_;
-                //                    return TokenT::kDiv;
+            // case '@':
+            //     token_stop_pos_ = current_pos_;
+            //     return TokenT::kAt;
+            //                case '+':
+            //                    token_stop_pos_ = current_pos_;
+            //                    return TokenT::kPlus;
+            //                case '-':
+            //                    token_stop_pos_ = current_pos_;
+            //                    return TokenT::kMinus;
+            //                case '/':
+            //                    token_stop_pos_ = current_pos_;
+            //                    return TokenT::kDiv;
             case '*':
                 token_stop_pos_ = current_pos_;
                 //                    return TokenT::kMul;
@@ -109,6 +109,15 @@ SPARQLLexer::TokenT SPARQLLexer::GetNextTokenType() {
             case '"':
                 while (HasNext()) {
                     if (*(current_pos_++) == '"') {
+                        if (*(current_pos_) == '@' || *(current_pos_) == '^') {
+                            while (HasNext()) {
+                                if (*(current_pos_++) == ' ') {
+                                    token_stop_pos_ = current_pos_;
+                                    token_stop_pos_--;
+                                    return TokenT::kString;
+                                }
+                            }
+                        }
                         token_stop_pos_ = current_pos_;
                         return TokenT::kString;
                     }

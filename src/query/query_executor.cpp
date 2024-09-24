@@ -118,13 +118,13 @@ bool QueryExecutor::PreJoin() {
     std::stringstream key;
     pre_join_ = std::vector<std::shared_ptr<std::vector<uint>>>(stat_.plan_.size());
     for (long unsigned int level = 0; level < stat_.plan_.size(); level++) {
-        if (level != 0 && (!empty_item_indices_[level].empty() || !univariate_results_[level].empty()))
+        if (!empty_item_indices_[level].empty())
             continue;
-        if (level == 0 && univariate_results_[0].size())
-            join_list.AddVectors(univariate_results_[0]);
+        if (univariate_results_[level].size())
+            join_list.AddVectors(univariate_results_[level]);
 
         for (long unsigned int i = 0; i < stat_.plan_[level].size(); i++) {
-            if (stat_.plan_[level][i].prestore_type_ != PlanGenerator::Item::PType::kEmpty) 
+            if (stat_.plan_[level][i].prestore_type_ != PlanGenerator::Item::PType::kEmpty)
                 join_list.AddVector(stat_.plan_[level][i].index_result_);
         }
         if (join_list.Size() > 1) {
@@ -175,42 +175,43 @@ void QueryExecutor::Next(Stat& stat) {
 void QueryExecutor::GenCondidateValue(Stat& stat) {
     JoinList join_list;
 
+    bool has_unariate_result = univariate_results_[stat.level_].size();
+    bool has_empty_item_ = empty_item_indices_[stat.level_].size();
+    bool has_filled_item = filled_item_indices_[stat.level_].size();
+
     join_list.AddVectors(univariate_results_[stat.level_]);
 
-    for (const auto& idx : empty_item_indices_[stat.level_]) {
+    for (const auto& idx : empty_item_indices_[stat.level_])
         join_list.AddVector(stat.plan_[stat.level_][idx].index_result_);
-    }
 
-    uint join_case = join_list.Size();
-
-    if (join_case == 0 || stat_.level_ == 0) {
+    if ((!has_unariate_result && !has_empty_item_ && has_filled_item) ||
+        (has_unariate_result && !has_empty_item_ && has_filled_item)) {
         if (pre_join_[stat_.level_] != nullptr) {
             stat.candidate_value_[stat.level_]->reserve(pre_join_[stat_.level_]->size());
-            for (auto iter = pre_join_[stat_.level_]->begin(); iter != pre_join_[stat_.level_]->end();
-                 iter++) {
+            for (auto iter = pre_join_[stat_.level_]->begin(); iter != pre_join_[stat_.level_]->end(); iter++)
                 stat.candidate_value_[stat.level_]->emplace_back(std::move(*iter));
-            }
             return;
         } else {
-            for (const auto& idx : filled_item_indices_[stat.level_]) {
+            for (const auto& idx : filled_item_indices_[stat.level_])
                 join_list.AddVector(stat.plan_[stat.level_][idx].index_result_);
-            }
         }
         stat.candidate_value_[stat.level_] = LeapfrogJoin(join_list);
     }
 
-    if (join_case == 1 && stat_.level_ != 0) {
-        // for (const auto& idx : item_other_type_indices_) {
-        // join_list.AddVector(stat.plan_[stat.level_][idx].search_result_);
-        // }
-        // stat.candidate_value_[stat.level_] = LeapfrogJoin(join_list);
+    if ((!has_unariate_result && has_empty_item_ && has_filled_item) ||
+        (has_unariate_result && !has_empty_item_ && !has_filled_item && join_list.Size() == 1) ||
+        (!has_unariate_result && has_empty_item_ && !has_filled_item && join_list.Size() == 1)) {
         std::shared_ptr<std::vector<uint>> range = join_list.GetRangeByIndex(0);
         stat.candidate_value_[stat.level_] = std::make_shared<std::vector<uint>>();
         for (uint i = 0; i < range->size(); i++) {
             stat.candidate_value_[stat.level_]->push_back(range->operator[](i));
         }
     }
-    if (join_case > 1) {
+
+    if ((has_unariate_result && has_empty_item_ && !has_filled_item) ||
+        (has_unariate_result && has_empty_item_ && has_filled_item) ||
+        (has_unariate_result && !has_empty_item_ && !has_filled_item && join_list.Size() > 1) ||
+        (!has_unariate_result && has_empty_item_ && !has_filled_item && join_list.Size() > 1)) {
         stat.candidate_value_[stat.level_] = LeapfrogJoin(join_list);
     }
 
@@ -309,7 +310,6 @@ void QueryExecutor::Query() {
     }
 
     auto end = std::chrono::high_resolution_clock::now();
-
     query_duration_ = end - begin;
 }
 

@@ -1,4 +1,6 @@
 #include "rdf-tdaa/parser/sparql_parser.hpp"
+#include <codecvt>
+#include <iomanip>
 #include <iostream>
 
 SPARQLParser::ParserException::ParserException(std::string message) : message_(std::move(message)) {}
@@ -253,6 +255,19 @@ void SPARQLParser::ParseBasicGraphPattern(bool is_option) {
     for (uint i = 0; i < 3; ++i) {
         auto token_t = sparql_lexer_.GetNextTokenType();
         std::string token_value = sparql_lexer_.GetCurrentTokenValue();
+
+        std::wstring_convert<std::codecvt_utf8<wchar_t>> converter;
+        std::wstring w_token_value = converter.from_bytes(token_value);
+
+        std::ostringstream oss;
+        for (wchar_t wc : w_token_value) {
+            if (wc < 0x80)
+                oss << (char)wc;
+            else
+                oss << "\\u" << std::uppercase << std::hex << std::setw(4) << std::setfill('0') << (int)wc;
+        }
+        token_value = oss.str();
+
         Term term;
         switch (token_t) {
             case SPARQLLexer::TokenT::kVariable:

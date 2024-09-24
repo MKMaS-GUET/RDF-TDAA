@@ -56,6 +56,23 @@ void Endpoint::query(const httplib::Request& req, httplib::Response& res) {
             auto last = results_id.end();
             const auto& modifier = parser->project_modifier();
             if (modifier.modifier_type_ == SPARQLParser::ProjectModifier::Distinct) {
+                uint variable_cnt = query_plan->value2variable().size();
+
+                if (variable_cnt != variable_indexes.size()) {
+                    std::vector<uint> not_projection_variable_index;
+                    for (uint i = 0; i < variable_cnt; i++)
+                        not_projection_variable_index.push_back(i);
+                    for (const auto& idx : variable_indexes)
+                        not_projection_variable_index.erase(not_projection_variable_index.begin() +
+                                                            idx.priority_);
+
+                    for (uint result_id = 0; result_id < results_id.size(); result_id++) {
+                        for (const auto& idx : not_projection_variable_index)
+                            results_id[result_id][idx] = 0;
+                    }
+                    std::sort(results_id.begin(), results_id.end());
+                }
+
                 last = std::unique(results_id.begin(), results_id.end(),
                                    [&](const std::vector<uint>& a, const std::vector<uint>& b) {
                                        return std::all_of(variable_indexes.begin(), variable_indexes.end(),
