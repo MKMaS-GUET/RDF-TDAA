@@ -62,9 +62,16 @@ void Endpoint::query(const httplib::Request& req, httplib::Response& res) {
                     std::vector<uint> not_projection_variable_index;
                     for (uint i = 0; i < variable_cnt; i++)
                         not_projection_variable_index.push_back(i);
+
+                    std::set<uint> indexes_to_remove;
                     for (const auto& idx : variable_indexes)
-                        not_projection_variable_index.erase(not_projection_variable_index.begin() +
-                                                            idx.priority_);
+                        indexes_to_remove.insert(idx.priority_);
+
+                    not_projection_variable_index.erase(
+                        std::remove_if(
+                            not_projection_variable_index.begin(), not_projection_variable_index.end(),
+                            [&indexes_to_remove](uint value) { return indexes_to_remove.count(value) > 0; }),
+                        not_projection_variable_index.end());
 
                     for (uint result_id = 0; result_id < results_id.size(); result_id++) {
                         for (const auto& idx : not_projection_variable_index)

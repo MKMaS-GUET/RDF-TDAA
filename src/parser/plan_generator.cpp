@@ -49,13 +49,13 @@ void PlanGenerator::DFS(const AdjacencyList& graph,
                         std::string vertex,
                         hash_map<std::string, bool>& visited,
                         AdjacencyList& tree,
-                        std::vector<std::string>& currentPath,
-                        std::vector<std::vector<std::string>>& allPaths) {
-    currentPath.push_back(vertex);  // Add the current vertex to the path
+                        std::deque<std::string>& current_path,
+                        std::vector<std::deque<std::string>>& all_paths) {
+    current_path.push_back(vertex);  // Add the current vertex to the path
 
     // Check if it's a leaf node in the spanning tree (no adjacent vertices)
     // if (graph.at(vertex).size() == 1 || visited[vertex] == true) {
-    //     allPaths.push_back(currentPath);  // Save the current path if it's a leaf
+    //     all_paths.push_back(current_path);  // Save the current path if it's a leaf
     // }
     bool all_visited = true;
     for (const auto& edge : graph.at(vertex)) {
@@ -64,28 +64,28 @@ void PlanGenerator::DFS(const AdjacencyList& graph,
         }
     }
     if (all_visited)
-        allPaths.push_back(currentPath);
+        all_paths.push_back(current_path);
     visited[vertex] = true;
 
     // Explore the adjacent vertices
     for (const auto& edge : graph.at(vertex)) {
         std::string adjVertex = edge.first;
         if (!visited[adjVertex]) {
-            tree[vertex].emplace_back(adjVertex, edge.second);            // Add edge to the spanning tree
-            DFS(graph, adjVertex, visited, tree, currentPath, allPaths);  // Continue DFS
+            tree[vertex].emplace_back(adjVertex, edge.second);              // Add edge to the spanning tree
+            DFS(graph, adjVertex, visited, tree, current_path, all_paths);  // Continue DFS
         }
     }
 
     // Backtrack: remove the current vertex from the path
-    currentPath.pop_back();
+    current_path.pop_back();
 }
 
-std::vector<std::vector<std::string>> PlanGenerator::FindAllPathsInGraph(const AdjacencyList& graph,
-                                                                         const std::string& root) {
+std::vector<std::deque<std::string>> PlanGenerator::FindAllPathsInGraph(const AdjacencyList& graph,
+                                                                        const std::string& root) {
     hash_map<std::string, bool> visited;             // Track visited vertices
     AdjacencyList tree;                              // The resulting spanning tree
-    std::vector<std::string> currentPath;            // Current path from the root to the current vertex
-    std::vector<std::vector<std::string>> allPaths;  // All paths from the root to the leaves
+    std::deque<std::string> current_path;            // Current path from the root to the current vertex
+    std::vector<std::deque<std::string>> all_paths;  // All paths from the root to the leaves
 
     // Initialize visited map
     for (const auto& pair : graph) {
@@ -94,9 +94,9 @@ std::vector<std::vector<std::string>> PlanGenerator::FindAllPathsInGraph(const A
     // visited[root] = true;
 
     // Perform DFS to fill the spanning tree and find all paths
-    DFS(graph, root, visited, tree, currentPath, allPaths);
+    DFS(graph, root, visited, tree, current_path, all_paths);
 
-    return allPaths;
+    return all_paths;
 }
 
 void PlanGenerator::Generate() {
@@ -118,7 +118,6 @@ void PlanGenerator::Generate() {
         if (s.IsVariable() && !p.IsVariable() && !o.IsVariable()) {
             v_value = s.value_;
             size = index_->GetByOPSize(index_->Term2ID(o), index_->Term2ID(p));
-            // std::cout << o.value_ << " " << index_->Term2ID(o) << " " << size << std::endl;
         }
         if (!s.IsVariable() && p.IsVariable() && !o.IsVariable()) {
             v_value = p.value_;
@@ -207,6 +206,7 @@ void PlanGenerator::Generate() {
         }
     }
 
+    // 作为第一个变量的优先级
     std::vector<std::string> variable_priority(query_graph_ud.size());
     std::transform(query_graph_ud.begin(), query_graph_ud.end(), variable_priority.begin(),
                    [](const auto& pair) { return pair.first; });
@@ -217,14 +217,16 @@ void PlanGenerator::Generate() {
         return;
     }
 
-    std::sort(variable_priority.begin(), variable_priority.end(), [&](const auto& var1, const auto& var2) {
+    auto sort_func = [&](const auto& var1, const auto& var2) {
         if (query_graph_ud[var1].size() + univariates[var1].count_ !=
             query_graph_ud[var2].size() + univariates[var2].count_) {
             return query_graph_ud[var1].size() + univariates[var1].count_ >
                    query_graph_ud[var2].size() + univariates[var2].count_;
         }
         return est_size[var1] < est_size[var2];
-    });
+    };
+
+    std::sort(variable_priority.begin(), variable_priority.end(), sort_func);
 
     if (debug) {
         std::cout << "------------------------------" << std::endl;
@@ -246,12 +248,12 @@ void PlanGenerator::Generate() {
         }
     }
 
-    std::vector<std::vector<std::string>> allPaths;
-    std::vector<std::vector<std::string>> partialPaths;
+    std::vector<std::deque<std::string>> all_paths;
+    std::vector<std::deque<std::string>> partial_paths;
     uint longest_path = 0;
     while (variable_priority.size() > 0) {
-        partialPaths = FindAllPathsInGraph(query_graph_ud, variable_priority[0]);
-        for (auto& path : partialPaths) {
+        partial_paths = FindAllPathsInGraph(query_graph_ud, variable_priority[0]);
+        for (auto& path : partial_paths) {
             for (auto& v : path) {
                 for (auto it = variable_priority.begin(); it != variable_priority.end(); it++) {
                     if (*it == v) {
@@ -260,27 +262,35 @@ void PlanGenerator::Generate() {
                     }
                 }
             }
-            if (allPaths.size() == 0 || path.size() > allPaths[longest_path].size()) {
-                longest_path = allPaths.size();
+            if (all_paths.size() == 0 || path.size() > all_paths[longest_path].size()) {
+                longest_path = all_paths.size();
             }
-            allPaths.push_back(path);
+            all_paths.push_back(path);
         }
     }
 
-    if (!(one_degree_variables.size() == query_graph_ud.size() - 1) &&  // 非star
+    if (debug) {
+        std::cout << "longest_path: " << longest_path << std::endl;
+        for (auto& path : all_paths) {
+            for (auto it = path.begin(); it != path.end(); it++)
+                std::cout << *it << " ";
+            std::cout << std::endl;
+        }
+        std::cout << "--------------------" << std::endl;
+    }
+
+    if (!(one_degree_variables.size() == query_graph_ud.size() - 1) &&  // 非 star
         ((one_degree_variables.size() == 2 &&
           one_degree_variables.size() + degree_two == query_graph_ud.size() &&
-          allPaths.size() == partialPaths.size()) ||  // 是连通图且是路径
-         allPaths.size() == 1)) {                     // 是一个环
-        if (allPaths.size() == 1) {                   // 是一个环/路径
-            if (est_size[allPaths[0][0]] < est_size[allPaths[0].back()]) {
-                for (auto it = allPaths[0].begin(); it != allPaths[0].end(); it++) {
+          all_paths.size() == partial_paths.size()) ||  // 是连通图且是路径
+         all_paths.size() == 1)) {                      // 是一个环
+        if (all_paths.size() == 1) {                    // 是一个环/路径
+            if (est_size[all_paths[0][0]] < est_size[all_paths[0].back()]) {
+                for (auto it = all_paths[0].begin(); it != all_paths[0].end(); it++)
                     variable_order_.push_back(*it);
-                }
             } else {
-                for (int i = allPaths[0].size() - 1; i > -1; i--) {
-                    variable_order_.push_back(allPaths[0][i]);
-                }
+                for (int i = all_paths[0].size() - 1; i > -1; i--)
+                    variable_order_.push_back(all_paths[0][i]);
             }
         } else {  // 是一个路径
             if (est_size[one_degree_variables[0]] < est_size[one_degree_variables[1]])
@@ -299,79 +309,58 @@ void PlanGenerator::Generate() {
                 };
             }
         }
-    } else if (allPaths.size()) {
-        phmap::flat_hash_set<std::string> exist_variables;
-        for (auto& v : allPaths[longest_path]) {
-            exist_variables.insert(v);
-        }
-        for (uint i = 0; i < allPaths.size(); i++) {
-            if (i != longest_path) {
-                for (auto it = allPaths[i].begin(); it != allPaths[i].end(); it++) {
-                    if (exist_variables.contains(*it)) {
-                        allPaths[i].erase(it);
-                        it--;
-                    } else {
-                        exist_variables.insert(*it);
+    } else if (all_paths.size()) {
+        std::vector<std::string> ends;
+
+        while (!all_paths.empty()) {
+            std::string higher_priority_variable;
+            size_t higher_priority = std::numeric_limits<size_t>::max();
+
+            for (const auto& path : all_paths) {
+                if (path.size() > 1) {
+                    size_t current_priority =
+                        query_graph_ud[path.front()].size() + univariates[path.front()].count_;
+                    if (current_priority < higher_priority) {
+                        higher_priority = current_priority;
+                        higher_priority_variable = path.front();
                     }
                 }
             }
-        }
 
-        if (debug) {
-            std::cout << "longest_path: " << longest_path << std::endl;
-            for (auto& path : allPaths) {
-                for (auto it = path.begin(); it != path.end(); it++) {
-                    std::cout << *it << " ";
+            if (!higher_priority_variable.empty())
+                variable_order_.push_back(higher_priority_variable);
+
+            for (auto it = all_paths.begin(); it != all_paths.end();) {
+                if (it->size() == 1) {
+                    ends.push_back(it->back());
+                    it->pop_front();
                 }
-                std::cout << std::endl;
+                if (!it->empty() && it->front() == higher_priority_variable)
+                    it->pop_front();
+
+                it = (it->empty()) ? all_paths.erase(it) : it + 1;
             }
         }
 
-        std::vector<std::string>::iterator path_its[allPaths.size()];
-        for (uint i = 0; i < allPaths.size(); i++) {
-            path_its[i] = allPaths[i].begin();
-        }
-
-        for (uint i = 0; i < exist_variables.size() - allPaths.size(); i++) {
-            std::string min_variable = "";
-            uint path_id = 0;
-            for (uint p = 0; p < allPaths.size(); p++) {
-                if (path_its[p] != allPaths[p].end() - 1) {
-                    if (min_variable == "" ||
-                        query_graph_ud[*path_its[p]].size() + univariates[*path_its[p]].count_ >
-                            query_graph_ud[min_variable].size() + univariates[min_variable].count_) {
-                        min_variable = *path_its[p];
-                        path_id = p;
-                    }
-                }
-            }
-            if (path_its[path_id] != allPaths[path_id].end() - 1)
-                path_its[path_id]++;
-            variable_order_.push_back(min_variable);
-        }
-
-        for (auto& path : allPaths) {
-            variable_order_.push_back(*(path.end() - 1));
-        }
+        std::sort(ends.begin(), ends.end(), sort_func);
+        for (auto& v : ends)
+            variable_order_.push_back(v);
     }
 
     for (auto it = univariates.begin(); it != univariates.end(); it++) {
         bool contains = false;
         for (auto& v : variable_order_) {
-            if (v.value_ == it->first) {
+            if (v.value_ == it->first)
                 contains = true;
-            }
         }
-        if (!contains) {
+        if (!contains)
             variable_order_.push_back(it->first);
-        }
     }
 
     if (debug) {
         std::cout << "variables order: " << std::endl;
-        for (auto it = variable_order_.begin(); it != variable_order_.end(); it++) {
+        for (auto it = variable_order_.begin(); it != variable_order_.end(); it++)
             std::cout << it->value_ << " ";
-        }
         std::cout << std::endl;
         std::cout << "------------------------------" << std::endl;
     }
@@ -491,9 +480,8 @@ std::vector<PlanGenerator::Variable> PlanGenerator::MappingVariable(
     const std::vector<std::string>& variables) {
     std::vector<Variable> ret;
     ret.reserve(variables.size());
-    for (const auto& var : variables) {
+    for (const auto& var : variables)
         ret.push_back(*value2variable_.at(var));
-    }
     return ret;
 }
 

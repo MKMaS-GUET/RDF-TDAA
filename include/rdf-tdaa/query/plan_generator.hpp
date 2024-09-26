@@ -3,6 +3,7 @@
 
 // #include <parallel_hashmap/phmap.h>
 #include <climits>
+#include <deque>
 #include <numeric>  // 包含 accumulate 函数
 #include <string>
 #include <unordered_map>
@@ -66,11 +67,11 @@ class PlanGenerator {
              std::string vertex,
              hash_map<std::string, bool>& visited,
              AdjacencyList& tree,
-             std::vector<std::string>& current_path,
-             std::vector<std::vector<std::string>>& all_paths);
+             std::deque<std::string>& current_path,
+             std::vector<std::deque<std::string>>& all_paths);
 
-    std::vector<std::vector<std::string>> FindAllPathsInGraph(const AdjacencyList& graph,
-                                                              const std::string& root);
+    std::vector<std::deque<std::string>> FindAllPathsInGraph(const AdjacencyList& graph,
+                                                             const std::string& root);
 
     void Generate();
 
