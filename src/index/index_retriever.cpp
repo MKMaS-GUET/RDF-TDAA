@@ -454,14 +454,17 @@ std::shared_ptr<std::vector<uint>> IndexRetriever::GetOPreSet(uint oid) {
 std::shared_ptr<std::vector<uint>> IndexRetriever::GetBySP(uint sid, uint pid) {
     if (0 < sid && sid <= max_subject_id_) {
         uint c_set_id = AccessToDAA(spo_, (sid - 1) * 2);
-        for (uint i = 0; i < subject_characteristic_set_[c_set_id - 1].size(); i++) {
-            if (subject_characteristic_set_[c_set_id - 1][i] == pid) {
-                auto [daa_offset, daa_size] = FetchDAABounds(spo_, sid);
-                return AccessDAA(spo_, i, daa_offset, daa_size);
-            }
+        const auto& char_set = subject_characteristic_set_[c_set_id - 1];
+
+        auto it = std::lower_bound(char_set.begin(), char_set.end(), pid);
+
+        if (it != char_set.end() && *it == pid) {
+            uint index = std::distance(char_set.begin(), it);
+            auto [daa_offset, daa_size] = FetchDAABounds(spo_, sid);
+            return AccessDAA(spo_, index, daa_offset, daa_size);
         }
     }
-    return std::make_shared<std::vector<uint>>();
+    return nullptr;
 }
 
 // ?s p o
@@ -469,24 +472,24 @@ std::shared_ptr<std::vector<uint>> IndexRetriever::GetByOP(uint oid, uint pid) {
     if ((0 < oid && oid <= dict_.shared_cnt()) || max_subject_id_ < oid) {
         if (oid > dict_.shared_cnt())
             oid -= dict_.subject_cnt();
-
         uint c_set_id = AccessToDAA(ops_, (oid - 1) * 2);
-        for (uint i = 0; i < object_characteristic_set_[c_set_id - 1].size(); i++) {
-            if (object_characteristic_set_[c_set_id - 1][i] == pid) {
-                auto [daa_offset, daa_size] = FetchDAABounds(ops_, oid);
-                return AccessDAA(ops_, i, daa_offset, daa_size);
-            }
+
+        const auto& char_set = object_characteristic_set_[c_set_id - 1];
+        auto it = std::lower_bound(char_set.begin(), char_set.end(), pid);
+
+        if (it != char_set.end() && *it == pid) {
+            uint index = std::distance(char_set.begin(), it);
+            auto [daa_offset, daa_size] = FetchDAABounds(ops_, oid);
+            return AccessDAA(ops_, index, daa_offset, daa_size);
         }
     }
-    return std::make_shared<std::vector<uint>>();
+    return nullptr;
 }
 
 // s ?p o
 std::shared_ptr<std::vector<uint>> IndexRetriever::GetBySO(uint sid, uint oid) {
     std::shared_ptr<std::vector<uint>> result = std::make_shared<std::vector<uint>>();
 
-    // 796
-    // <http://www.w3.org/1999/02/22-rdf-syntax-ns#type>
     if ((0 < sid && sid <= max_subject_id_) && (oid <= dict_.shared_cnt() || max_subject_id_ < oid)) {
         uint ops_daa_offset = (oid - 1) * 2;
         if (oid > dict_.shared_cnt())
@@ -589,11 +592,17 @@ uint IndexRetriever::GetByOSize(uint oid) {
 }
 
 uint IndexRetriever::GetBySPSize(uint sid, uint pid) {
-    return GetBySP(sid, pid)->size();
+    auto r = GetBySP(sid, pid);
+    if (r)
+        return r->size();
+    return 0;
 }
 
 uint IndexRetriever::GetByOPSize(uint oid, uint pid) {
-    return GetByOP(oid, pid)->size();
+    auto r = GetByOP(oid, pid);
+    if (r)
+        return r->size();
+    return 0;
 }
 
 uint IndexRetriever::GetBySOSize(uint sid, uint oid) {

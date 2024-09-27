@@ -42,7 +42,7 @@ QueryExecutor::QueryExecutor(std::shared_ptr<IndexRetriever> index,
       index_(index),
       filled_item_indices_(plan->filled_item_indices()),
       empty_item_indices_(plan->empty_item_indices()),
-      univariate_results_(plan->univariate_results()),
+      pre_results_(plan->pre_results()),
       limit_(limit),
       shared_cnt_(shared_cnt) {}
 
@@ -120,8 +120,8 @@ bool QueryExecutor::PreJoin() {
     for (long unsigned int level = 0; level < stat_.plan_.size(); level++) {
         if (!empty_item_indices_[level].empty())
             continue;
-        if (univariate_results_[level].size())
-            join_list.AddVectors(univariate_results_[level]);
+        if (pre_results_[level].size())
+            join_list.AddVectors(pre_results_[level]);
 
         for (long unsigned int i = 0; i < stat_.plan_[level].size(); i++) {
             if (stat_.plan_[level][i].prestore_type_ != PlanGenerator::Item::PType::kEmpty)
@@ -175,11 +175,11 @@ void QueryExecutor::Next(Stat& stat) {
 void QueryExecutor::GenCondidateValue(Stat& stat) {
     JoinList join_list;
 
-    bool has_unariate_result = univariate_results_[stat.level_].size();
+    bool has_unariate_result = pre_results_[stat.level_].size();
     bool has_empty_item_ = empty_item_indices_[stat.level_].size();
     bool has_filled_item = filled_item_indices_[stat.level_].size();
 
-    join_list.AddVectors(univariate_results_[stat.level_]);
+    join_list.AddVectors(pre_results_[stat.level_]);
 
     for (const auto& idx : empty_item_indices_[stat.level_])
         join_list.AddVector(stat.plan_[stat.level_][idx].index_result_);
@@ -258,21 +258,37 @@ bool QueryExecutor::FillEmptyItem(Stat& stat, uint value) {
             if (empty_item.triple_pattern_id_ != item.triple_pattern_id_)
                 continue;
 
-            // s ?p ?o
-            if (item.retrieval_type_ == Rtype::kSP && item.prestore_type_ == Ptype::kPredicate)
-                empty_item.index_result_ = index_->GetBySP(item.search_id_, value);
-            if (item.retrieval_type_ == Rtype::kSO && item.prestore_type_ == Ptype::kObject)
-                empty_item.index_result_ = index_->GetBySO(item.search_id_, value);
-            // ?s p ?o
-            if (item.retrieval_type_ == Rtype::kSP && item.prestore_type_ == Ptype::kPreSub)
-                empty_item.index_result_ = index_->GetBySP(value, item.search_id_);
-            if (item.retrieval_type_ == Rtype::kOP && item.prestore_type_ == Ptype::kPreObj)
-                empty_item.index_result_ = index_->GetByOP(value, item.search_id_);
-            // ?s ?p o
-            if (item.retrieval_type_ == Rtype::kSO && item.prestore_type_ == Ptype::kSubject)
-                empty_item.index_result_ = index_->GetBySO(value, item.search_id_);
-            if (item.retrieval_type_ == Rtype::kOP && item.prestore_type_ == Ptype::kPredicate)
-                empty_item.index_result_ = index_->GetByOP(item.search_id_, value);
+            uint id = item.search_id_;
+            std::shared_ptr<std::vector<uint>> r;
+
+            if (item.retrieval_type_ == Rtype::kSO) {
+                if (item.prestore_type_ == Ptype::kObject)
+                    empty_item.index_result_ = index_->GetBySO(id, value);
+                else if (item.prestore_type_ == Ptype::kSubject)
+                    empty_item.index_result_ = index_->GetBySO(value, id);
+            }
+
+            if (item.retrieval_type_ == Rtype::kSP) {
+                if (item.prestore_type_ == Ptype::kPredicate)
+                    r = index_->GetBySP(id, value);
+                else if (item.prestore_type_ == Ptype::kPreSub)
+                    r = index_->GetBySP(value, id);
+                if (r)
+                    empty_item.index_result_ = r;
+                else
+                    empty_item.index_result_->clear();
+            }
+
+            if (item.retrieval_type_ == Rtype::kOP) {
+                if (item.prestore_type_ == Ptype::kPreObj)
+                    r = index_->GetByOP(value, id);
+                else if (item.prestore_type_ == Ptype::kPredicate)
+                    r = index_->GetByOP(id, value);
+                if (r)
+                    empty_item.index_result_ = r;
+                else
+                    empty_item.index_result_->clear();
+            }
 
             if (empty_item.index_result_->size() == 0)
                 match = false;

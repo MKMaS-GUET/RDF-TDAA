@@ -62,8 +62,6 @@ class IndexRetriever {
     std::vector<std::vector<uint>> subject_characteristic_set_;
     std::vector<std::vector<uint>> object_characteristic_set_;
 
-    ulong max_subject_id_;
-
     ulong FileSize(std::string file_name);
 
     void Init();
@@ -79,6 +77,8 @@ class IndexRetriever {
     uint AccessLevels(DAA& daa, ulong offset);
 
     std::shared_ptr<std::vector<uint>> AccessDAA(DAA& daa, uint offset, uint daa_start, uint daa_size);
+
+    ulong max_subject_id_;
 
    public:
     IndexRetriever();

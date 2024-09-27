@@ -32,7 +32,7 @@ class QueryExecutor {
     std::shared_ptr<IndexRetriever> index_;
     std::vector<std::vector<uint>>& filled_item_indices_;
     std::vector<std::vector<uint>>& empty_item_indices_;
-    std::vector<std::vector<std::shared_ptr<std::vector<uint>>>>& univariate_results_;
+    std::vector<std::vector<std::shared_ptr<std::vector<uint>>>>& pre_results_;
     std::vector<std::shared_ptr<std::vector<uint>>> pre_join_;
     uint limit_;
     uint shared_cnt_;

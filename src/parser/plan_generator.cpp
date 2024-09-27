@@ -91,7 +91,6 @@ std::vector<std::deque<std::string>> PlanGenerator::FindAllPathsInGraph(const Ad
     for (const auto& pair : graph) {
         visited[pair.first] = false;
     }
-    // visited[root] = true;
 
     // Perform DFS to fill the spanning tree and find all paths
     DFS(graph, root, visited, tree, current_path, all_paths);
@@ -235,19 +234,6 @@ void PlanGenerator::Generate() {
         }
     }
 
-    std::vector<std::string> one_degree_variables;
-    uint degree_two = 0;
-    uint other_degree = 0;
-    for (auto vertex_it = query_graph_ud.begin(); vertex_it != query_graph_ud.end(); vertex_it++) {
-        if (vertex_it->second.size() + univariates[vertex_it->first].count_ == 1) {
-            one_degree_variables.push_back(vertex_it->first);
-        } else if (vertex_it->second.size() + univariates[vertex_it->first].count_ == 2) {
-            degree_two++;
-        } else {
-            other_degree++;
-        }
-    }
-
     std::vector<std::deque<std::string>> all_paths;
     std::vector<std::deque<std::string>> partial_paths;
     uint longest_path = 0;
@@ -279,73 +265,40 @@ void PlanGenerator::Generate() {
         std::cout << "--------------------" << std::endl;
     }
 
-    if (!(one_degree_variables.size() == query_graph_ud.size() - 1) &&  // 非 star
-        ((one_degree_variables.size() == 2 &&
-          one_degree_variables.size() + degree_two == query_graph_ud.size() &&
-          all_paths.size() == partial_paths.size()) ||  // 是连通图且是路径
-         all_paths.size() == 1)) {                      // 是一个环
-        if (all_paths.size() == 1) {                    // 是一个环/路径
-            if (est_size[all_paths[0][0]] < est_size[all_paths[0].back()]) {
-                for (auto it = all_paths[0].begin(); it != all_paths[0].end(); it++)
-                    variable_order_.push_back(*it);
-            } else {
-                for (int i = all_paths[0].size() - 1; i > -1; i--)
-                    variable_order_.push_back(all_paths[0][i]);
-            }
-        } else {  // 是一个路径
-            if (est_size[one_degree_variables[0]] < est_size[one_degree_variables[1]])
-                variable_order_.push_back(one_degree_variables[0]);
-            else
-                variable_order_.push_back(one_degree_variables[1]);
-            std::string previews = variable_order_.back().value_;
-            variable_order_.push_back(query_graph_ud[previews][0].first);
-            while (variable_order_.size() != query_graph_ud.size()) {
-                if (query_graph_ud[variable_order_.back().value_][0].first != previews) {
-                    previews = variable_order_.back().value_;
-                    variable_order_.push_back(query_graph_ud[variable_order_.back().value_][0].first);
-                } else {
-                    previews = variable_order_.back().value_;
-                    variable_order_.push_back(query_graph_ud[variable_order_.back().value_][1].first);
-                };
-            }
-        }
-    } else if (all_paths.size()) {
-        std::vector<std::string> ends;
+    std::vector<std::string> ends;
+    while (!all_paths.empty()) {
+        std::string higher_priority_variable;
+        size_t higher_priority = std::numeric_limits<size_t>::max();
 
-        while (!all_paths.empty()) {
-            std::string higher_priority_variable;
-            size_t higher_priority = std::numeric_limits<size_t>::max();
-
-            for (const auto& path : all_paths) {
-                if (path.size() > 1) {
-                    size_t current_priority =
-                        query_graph_ud[path.front()].size() + univariates[path.front()].count_;
-                    if (current_priority < higher_priority) {
-                        higher_priority = current_priority;
-                        higher_priority_variable = path.front();
-                    }
+        for (const auto& path : all_paths) {
+            if (path.size() > 1) {
+                size_t current_priority =
+                    query_graph_ud[path.front()].size() + univariates[path.front()].count_;
+                if (current_priority < higher_priority) {
+                    higher_priority = current_priority;
+                    higher_priority_variable = path.front();
                 }
-            }
-
-            if (!higher_priority_variable.empty())
-                variable_order_.push_back(higher_priority_variable);
-
-            for (auto it = all_paths.begin(); it != all_paths.end();) {
-                if (it->size() == 1) {
-                    ends.push_back(it->back());
-                    it->pop_front();
-                }
-                if (!it->empty() && it->front() == higher_priority_variable)
-                    it->pop_front();
-
-                it = (it->empty()) ? all_paths.erase(it) : it + 1;
             }
         }
 
-        std::sort(ends.begin(), ends.end(), sort_func);
-        for (auto& v : ends)
-            variable_order_.push_back(v);
+        if (!higher_priority_variable.empty())
+            variable_order_.push_back(higher_priority_variable);
+
+        for (auto it = all_paths.begin(); it != all_paths.end();) {
+            if (it->size() == 1) {
+                ends.push_back(it->back());
+                it->pop_front();
+            }
+            if (!it->empty() && it->front() == higher_priority_variable)
+                it->pop_front();
+
+            it = (it->empty()) ? all_paths.erase(it) : it + 1;
+        }
     }
+
+    std::sort(ends.begin(), ends.end(), sort_func);
+    for (auto& v : ends)
+        variable_order_.push_back(v);
 
     for (auto it = univariates.begin(); it != univariates.end(); it++) {
         bool contains = false;
@@ -376,7 +329,7 @@ void PlanGenerator::GenPlanTable() {
 
     size_t n = variable_order_.size();
     query_plan_.resize(n);
-    univariate_results_.resize(n);
+    pre_results_.resize(n);
     filled_item_indices_.resize(n);
     empty_item_indices_.resize(n);
 
@@ -389,6 +342,38 @@ void PlanGenerator::GenPlanTable() {
         uint s_var_id = 0;
         uint p_var_id = 0;
         uint o_var_id = 0;
+
+        if (s.IsVariable() && !p.IsVariable() && !o.IsVariable()) {
+            s_var_id = value2variable_[s.value_]->priority_;
+            value2variable_[s.value_]->position_ = Term::Positon::kSubject;
+            uint oid = index_->Term2ID(o);
+            uint pid = index_->Term2ID(p);
+            std::shared_ptr<std::vector<uint>> r = index_->GetByOP(oid, pid);
+            if (r)
+                pre_results_[s_var_id].push_back(r);
+            else
+                pre_results_[s_var_id].push_back(std::make_shared<std::vector<uint>>());
+        }
+        if (!s.IsVariable() && p.IsVariable() && !o.IsVariable()) {
+            p_var_id = value2variable_[p.value_]->priority_;
+            value2variable_[p.value_]->position_ = Term::Positon::kPredicate;
+            uint sid = index_->Term2ID(s);
+            uint oid = index_->Term2ID(o);
+            std::shared_ptr<std::vector<uint>> r = index_->GetBySO(sid, oid);
+            pre_results_[p_var_id].push_back(r);
+        }
+        if (!s.IsVariable() && !p.IsVariable() && o.IsVariable()) {
+            o_var_id = value2variable_[o.value_]->priority_;
+            value2variable_[o.value_]->position_ = Term::Positon::kObject;
+            uint sid = index_->Term2ID(s);
+            uint pid = index_->Term2ID(p);
+            std::shared_ptr<std::vector<uint>> r = index_->GetBySP(sid, pid);
+            // pre_results_[o_var_id].push_back(r);
+            if (r)
+                pre_results_[o_var_id].push_back(r);
+            else
+                pre_results_[o_var_id].push_back(std::make_shared<std::vector<uint>>());
+        }
 
         if (triple_parttern.variale_cnt_ == 2) {
             Item filled_item, empty_item;
@@ -447,31 +432,6 @@ void PlanGenerator::GenPlanTable() {
             query_plan_[lower_priority_id].push_back(empty_item);
             empty_item_indices_[lower_priority_id].push_back(query_plan_[lower_priority_id].size() - 1);
         }
-
-        if (s.IsVariable() && !p.IsVariable() && !o.IsVariable()) {
-            s_var_id = value2variable_[s.value_]->priority_;
-            value2variable_[s.value_]->position_ = Term::Positon::kSubject;
-            uint oid = index_->Term2ID(o);
-            uint pid = index_->Term2ID(p);
-            std::shared_ptr<std::vector<uint>> r = index_->GetByOP(oid, pid);
-            univariate_results_[s_var_id].push_back(r);
-        }
-        if (!s.IsVariable() && p.IsVariable() && !o.IsVariable()) {
-            p_var_id = value2variable_[p.value_]->priority_;
-            value2variable_[p.value_]->position_ = Term::Positon::kPredicate;
-            uint sid = index_->Term2ID(s);
-            uint oid = index_->Term2ID(o);
-            std::shared_ptr<std::vector<uint>> r = index_->GetBySO(sid, oid);
-            univariate_results_[p_var_id].push_back(r);
-        }
-        if (!s.IsVariable() && !p.IsVariable() && o.IsVariable()) {
-            o_var_id = value2variable_[o.value_]->priority_;
-            value2variable_[o.value_]->position_ = Term::Positon::kObject;
-            uint sid = index_->Term2ID(s);
-            uint pid = index_->Term2ID(p);
-            std::shared_ptr<std::vector<uint>> r = index_->GetBySP(sid, pid);
-            univariate_results_[o_var_id].push_back(r);
-        }
         triple_pattern_id++;
     }
 }
@@ -501,8 +461,8 @@ std::vector<std::vector<uint>>& PlanGenerator::empty_item_indices() {
     return empty_item_indices_;
 }
 
-std::vector<std::vector<std::shared_ptr<std::vector<uint>>>>& PlanGenerator::univariate_results() {
-    return univariate_results_;
+std::vector<std::vector<std::shared_ptr<std::vector<uint>>>>& PlanGenerator::pre_results() {
+    return pre_results_;
 }
 
 bool PlanGenerator::zero_result() {
