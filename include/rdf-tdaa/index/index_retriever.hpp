@@ -31,13 +31,23 @@ uint range_rank(MMap<char>& bits, uint begin, uint end);
 
 class IndexRetriever {
     struct DAA {
-        uint chara_set_id_width_;
-        uint daa_offset_width_;
-        uint daa_levels_width_;
-        MMap<uint> to_daa_;
-        MMap<uint> daa_levels_;
-        MMap<char> daa_level_end_;
-        MMap<char> daa_array_end_;
+        uint chara_set_id_width;
+        uint daa_offset_width;
+        uint daa_levels_width;
+        MMap<uint> to_daa;
+        MMap<uint> daa_levels;
+        MMap<char> daa_level_end;
+        MMap<char> daa_array_end;
+    };
+
+    struct CharacteristicSet {
+        uint count;
+        MMap<uint8_t> mmap;
+        std::vector<std::pair<uint, uint>> offset_size;
+        std::vector<std::vector<uint>> sets;
+
+        CharacteristicSet();
+        CharacteristicSet(uint cnt);
     };
 
     std::string db_name_;
@@ -59,14 +69,16 @@ class IndexRetriever {
     std::vector<std::shared_ptr<std::vector<uint>>> ps_sets_;
     std::vector<std::shared_ptr<std::vector<uint>>> po_sets_;
 
-    std::vector<std::vector<uint>> subject_characteristic_set_;
-    std::vector<std::vector<uint>> object_characteristic_set_;
+    CharacteristicSet subject_characteristic_set_;
+    CharacteristicSet object_characteristic_set_;
+
+    ulong max_subject_id_;
 
     ulong FileSize(std::string file_name);
 
-    void Init();
+    void InitMMap();
 
-    void LoadCharacteristicSet(std::vector<std::vector<uint>>& characteristic_sets, std::string filename);
+    std::vector<uint>& GetCharacteristicSet(CharacteristicSet& c_set, uint c_id);
 
     uint AccessBitSequence(MMap<uint>& bits, uint data_width, ulong bit_start);
 
@@ -77,8 +89,6 @@ class IndexRetriever {
     uint AccessLevels(DAA& daa, ulong offset);
 
     std::shared_ptr<std::vector<uint>> AccessDAA(DAA& daa, uint offset, uint daa_start, uint daa_size);
-
-    ulong max_subject_id_;
 
    public:
     IndexRetriever();

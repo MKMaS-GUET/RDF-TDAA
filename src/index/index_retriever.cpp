@@ -39,6 +39,13 @@ uint range_rank(MMap<char>& bits, uint begin, uint end) {
     return cnt;
 }
 
+IndexRetriever::CharacteristicSet::CharacteristicSet() {}
+
+IndexRetriever::CharacteristicSet::CharacteristicSet(uint cnt) : count(cnt) {
+    offset_size = std::vector<std::pair<uint, uint>>(cnt);
+    sets = std::vector<std::vector<uint>>(cnt);
+}
+
 IndexRetriever::IndexRetriever() {}
 
 IndexRetriever::IndexRetriever(std::string db_name) : db_name_(db_name) {
@@ -77,7 +84,7 @@ IndexRetriever::IndexRetriever(std::string db_name) : db_name_(db_name) {
     for (auto& t : threads)
         t.join();
 
-    Init();
+    InitMMap();
     ps_sets_ = std::vector<std::shared_ptr<std::vector<uint>>>(dict_.predicate_cnt());
     for (auto& set : ps_sets_)
         set = std::make_shared<std::vector<uint>>();
@@ -85,8 +92,8 @@ IndexRetriever::IndexRetriever(std::string db_name) : db_name_(db_name) {
     for (auto& set : po_sets_)
         set = std::make_shared<std::vector<uint>>();
 
-    LoadCharacteristicSet(subject_characteristic_set_, db_index_path_ + "s_c_sets");
-    LoadCharacteristicSet(object_characteristic_set_, db_index_path_ + "o_c_sets");
+    // LoadCharacteristicSet(subject_characteristic_set_, db_index_path_ + "s_c_sets");
+    // LoadCharacteristicSet(object_characteristic_set_, db_index_path_ + "o_c_sets");
 
     max_subject_id_ = dict_.shared_cnt() + dict_.subject_cnt();
 
@@ -102,7 +109,7 @@ ulong IndexRetriever::FileSize(std::string file_name) {
     return size;
 }
 
-void IndexRetriever::Init() {
+void IndexRetriever::InitMMap() {
     predicate_index_ = MMap<uint>(db_index_path_ + "predicate_index");
 
     std::string file_path = db_index_path_ + "predicate_index_arrays";
@@ -111,48 +118,63 @@ void IndexRetriever::Init() {
     else
         predicate_index_arrays_no_compress_ = MMap<uint>(file_path);
 
-    spo_.to_daa_ = MMap<uint>(db_index_path_ + "spo_to_daa");
-    spo_.daa_levels_ = MMap<uint>(db_index_path_ + "spo_daa_levels");
-    spo_.daa_level_end_ = MMap<char>(db_index_path_ + "spo_daa_level_end");
-    spo_.daa_array_end_ = MMap<char>(db_index_path_ + "spo_daa_array_end");
+    spo_.to_daa = MMap<uint>(db_index_path_ + "spo_to_daa");
+    spo_.daa_levels = MMap<uint>(db_index_path_ + "spo_daa_levels");
+    spo_.daa_level_end = MMap<char>(db_index_path_ + "spo_daa_level_end");
+    spo_.daa_array_end = MMap<char>(db_index_path_ + "spo_daa_array_end");
 
-    ops_.to_daa_ = MMap<uint>(db_index_path_ + "ops_to_daa");
-    ops_.daa_levels_ = MMap<uint>(db_index_path_ + "ops_daa_levels");
-    ops_.daa_level_end_ = MMap<char>(db_index_path_ + "ops_daa_level_end");
-    ops_.daa_array_end_ = MMap<char>(db_index_path_ + "ops_daa_array_end");
+    ops_.to_daa = MMap<uint>(db_index_path_ + "ops_to_daa");
+    ops_.daa_levels = MMap<uint>(db_index_path_ + "ops_daa_levels");
+    ops_.daa_level_end = MMap<char>(db_index_path_ + "ops_daa_level_end");
+    ops_.daa_array_end = MMap<char>(db_index_path_ + "ops_daa_array_end");
+
+    MMap<uint> s_c_sets = MMap<uint>(db_index_path_ + "s_c_sets");
+    uint count = s_c_sets[0];
+    subject_characteristic_set_ = CharacteristicSet(count);
+    subject_characteristic_set_.mmap = MMap<uint8_t>(db_index_path_ + "s_c_sets");
+    for (uint set_id = 1; set_id <= count; set_id++)
+        subject_characteristic_set_.offset_size[set_id - 1] = {s_c_sets[2 * set_id - 1],
+                                                               s_c_sets[2 * set_id]};
+    s_c_sets.CloseMap();
+
+    MMap<uint> o_c_sets = MMap<uint>(db_index_path_ + "o_c_sets");
+    count = o_c_sets[0];
+    object_characteristic_set_ = CharacteristicSet(count);
+    object_characteristic_set_.mmap = MMap<uint8_t>(db_index_path_ + "o_c_sets");
+    for (uint set_id = 1; set_id <= count; set_id++)
+        object_characteristic_set_.offset_size[set_id - 1] = {o_c_sets[2 * set_id - 1], o_c_sets[2 * set_id]};
+    o_c_sets.CloseMap();
 
     if (to_daa_compressed_ || levels_compressed_) {
         MMap<uint> data_width = MMap<uint>(db_index_path_ + "data_width", 6 * 4);
-        spo_.chara_set_id_width_ = data_width[0];
-        spo_.daa_offset_width_ = data_width[1];
-        spo_.daa_levels_width_ = data_width[2];
-        ops_.chara_set_id_width_ = data_width[3];
-        ops_.daa_offset_width_ = data_width[4];
-        ops_.daa_levels_width_ = data_width[5];
+        spo_.chara_set_id_width = data_width[0];
+        spo_.daa_offset_width = data_width[1];
+        spo_.daa_levels_width = data_width[2];
+        ops_.chara_set_id_width = data_width[3];
+        ops_.daa_offset_width = data_width[4];
+        ops_.daa_levels_width = data_width[5];
         data_width.CloseMap();
     }
 }
 
-void IndexRetriever::LoadCharacteristicSet(std::vector<std::vector<uint>>& characteristic_sets,
-                                           std::string filename) {
-    // 读取压缩后的数据长度
-    auto [recovdata, total_length] = LoadAndDecompress(filename);
+std::vector<uint>& IndexRetriever::GetCharacteristicSet(CharacteristicSet& c_set, uint c_id) {
+    c_id -= 1;
+    if (c_set.sets[c_id].size() == 0) {
+        uint offset = (c_id == 0) ? 0 : c_set.offset_size[c_id - 1].first;
+        uint buffer_size = c_set.offset_size[c_id].first - offset;
+        uint original_size = c_set.offset_size[c_id].second;
 
-    std::vector<uint> p_set;
-    uint value;
-    for (uint offset = 0; offset < total_length; offset++) {
-        value = recovdata[offset];
-        if (value != 0) {
-            p_set.push_back(recovdata[offset]);
-        } else {
-            p_set.shrink_to_fit();
-            characteristic_sets.push_back(p_set);
-            p_set.clear();
-        }
+        uint base = (c_set.count * 2 + 1) * 4;
+        uint8_t* compressed_buffer = new uint8_t[buffer_size];
+        for (uint i = 0; i < buffer_size; i++)
+            compressed_buffer[i] = c_set.mmap[base + offset + i];
+
+        uint32_t* original_data = Decompress(compressed_buffer, original_size);
+        for (uint i = 1; i < original_size; i++)
+            original_data[i] += original_data[i - 1];
+        c_set.sets[c_id] = std::vector<uint32_t>(original_data, original_data + original_size);
     }
-    characteristic_sets.shrink_to_fit();
-
-    delete[] recovdata;
+    return c_set.sets[c_id];
 }
 
 uint IndexRetriever::AccessBitSequence(MMap<uint>& bits, uint data_width, ulong bit_start) {
@@ -183,8 +205,8 @@ uint IndexRetriever::AccessBitSequence(MMap<uint>& bits, uint data_width, ulong 
 }
 
 std::shared_ptr<std::vector<uint>> IndexRetriever::AccessAllArrays(DAA& daa, uint daa_offset, uint daa_size) {
-    MMap<uint>& levels = daa.daa_levels_;
-    uint data_width = daa.daa_levels_width_;
+    MMap<uint>& levels = daa.daa_levels;
+    uint data_width = daa.daa_levels_width;
     ulong bit_start = daa_offset * ulong(data_width);
 
     uint uint_base = bit_start / 32;
@@ -224,7 +246,7 @@ std::shared_ptr<std::vector<uint>> IndexRetriever::AccessAllArrays(DAA& daa, uin
         return std::make_shared<std::vector<uint>>(std::vector<uint>{levels_mem[0]});
 
     std::vector<uint> level_starts;
-    One one = One(daa.daa_level_end_, daa_offset, daa_offset + daa_size);
+    One one = One(daa.daa_level_end, daa_offset, daa_offset + daa_size);
     uint end = one.Next();
     while (end != daa_offset + daa_size) {
         level_starts.push_back(end + 1);
@@ -232,7 +254,7 @@ std::shared_ptr<std::vector<uint>> IndexRetriever::AccessAllArrays(DAA& daa, uin
     }
     std::shared_ptr<std::vector<uint>> result = std::make_shared<std::vector<uint>>();
 
-    MMap<char>& array_end = daa.daa_array_end_;
+    MMap<char>& array_end = daa.daa_array_end;
 
     uint predicate_cnt = level_starts[0] - daa_offset;
     for (uint p = 0; p < predicate_cnt; p++) {
@@ -258,21 +280,21 @@ std::shared_ptr<std::vector<uint>> IndexRetriever::AccessAllArrays(DAA& daa, uin
 
 uint IndexRetriever::AccessToDAA(DAA& daa, ulong offset) {
     if (to_daa_compressed_) {
-        uint data_width = (offset % 2) ? daa.daa_offset_width_ : daa.chara_set_id_width_;
+        uint data_width = (offset % 2) ? daa.daa_offset_width : daa.chara_set_id_width;
 
-        ulong bit_start = ulong(offset / 2) * ulong(daa.chara_set_id_width_ + daa.daa_offset_width_) +
-                          ((offset % 2) ? daa.chara_set_id_width_ : 0);
+        ulong bit_start = ulong(offset / 2) * ulong(daa.chara_set_id_width + daa.daa_offset_width) +
+                          ((offset % 2) ? daa.chara_set_id_width : 0);
 
-        return AccessBitSequence(daa.to_daa_, data_width, bit_start);
+        return AccessBitSequence(daa.to_daa, data_width, bit_start);
     } else {
-        return daa.to_daa_[offset];
+        return daa.to_daa[offset];
     }
 }
 
 uint IndexRetriever::AccessLevels(DAA& daa, ulong offset) {
-    MMap<uint>& levels = daa.daa_levels_;
+    MMap<uint>& levels = daa.daa_levels;
     if (levels_compressed_) {
-        uint data_width = daa.daa_levels_width_;
+        uint data_width = daa.daa_levels_width;
         ulong bit_start = offset * ulong(data_width);
         return AccessBitSequence(levels, data_width, bit_start);
     } else {
@@ -286,11 +308,10 @@ std::shared_ptr<std::vector<uint>> IndexRetriever::AccessDAA(DAA& daa,
                                                              uint daa_size) {
     uint value;
     uint value_offset;
-    MMap<char>& level_end = daa.daa_level_end_;
-    MMap<char>& array_end = daa.daa_array_end_;
+    MMap<char>& level_end = daa.daa_level_end;
+    MMap<char>& array_end = daa.daa_array_end;
 
     value_offset = daa_offset + offset;
-    // std::cout << offset << std::endl;
     value = AccessLevels(daa, value_offset);
 
     if (daa_size == 1)
@@ -322,15 +343,15 @@ void IndexRetriever::Close() {
     else
         predicate_index_arrays_no_compress_.CloseMap();
 
-    spo_.to_daa_.CloseMap();
-    spo_.daa_levels_.CloseMap();
-    spo_.daa_level_end_.CloseMap();
-    spo_.daa_array_end_.CloseMap();
+    spo_.to_daa.CloseMap();
+    spo_.daa_levels.CloseMap();
+    spo_.daa_level_end.CloseMap();
+    spo_.daa_array_end.CloseMap();
 
-    ops_.to_daa_.CloseMap();
-    ops_.daa_levels_.CloseMap();
-    ops_.daa_level_end_.CloseMap();
-    ops_.daa_array_end_.CloseMap();
+    ops_.to_daa.CloseMap();
+    ops_.daa_levels.CloseMap();
+    ops_.daa_level_end.CloseMap();
+    ops_.daa_array_end.CloseMap();
 
     std::vector<std::shared_ptr<std::vector<uint>>>().swap(ps_sets_);
     std::vector<std::shared_ptr<std::vector<uint>>>().swap(po_sets_);
@@ -343,7 +364,7 @@ const char* IndexRetriever::ID2String(uint id, SPARQLParser::Term::Positon pos) 
 }
 
 uint IndexRetriever::Term2ID(const SPARQLParser::Term& term) {
-    return dict_.String2ID(term.value_, term.position_);
+    return dict_.String2ID(term.value, term.position);
 }
 
 std::pair<uint, uint> IndexRetriever::FetchDAABounds(DAA& daa, uint id) {
@@ -434,7 +455,8 @@ std::shared_ptr<std::vector<uint>> IndexRetriever::GetOSet(uint pid) {
 std::shared_ptr<std::vector<uint>> IndexRetriever::GetSPreSet(uint sid) {
     if (0 < sid && sid <= max_subject_id_) {
         uint c_set_id = AccessToDAA(spo_, (sid - 1) * 2);
-        return std::make_shared<std::vector<uint>>(subject_characteristic_set_[c_set_id - 1]);
+        return std::make_shared<std::vector<uint>>(
+            GetCharacteristicSet(subject_characteristic_set_, c_set_id));
     }
     return std::make_shared<std::vector<uint>>();
 }
@@ -445,7 +467,8 @@ std::shared_ptr<std::vector<uint>> IndexRetriever::GetOPreSet(uint oid) {
         if (oid > dict_.shared_cnt())
             oid -= dict_.subject_cnt();
         uint c_set_id = AccessToDAA(ops_, (oid - 1) * 2);
-        return std::make_shared<std::vector<uint>>(object_characteristic_set_[c_set_id - 1]);
+        return std::make_shared<std::vector<uint>>(
+            GetCharacteristicSet(object_characteristic_set_, c_set_id));
     }
     return std::make_shared<std::vector<uint>>();
 }
@@ -454,8 +477,7 @@ std::shared_ptr<std::vector<uint>> IndexRetriever::GetOPreSet(uint oid) {
 std::shared_ptr<std::vector<uint>> IndexRetriever::GetBySP(uint sid, uint pid) {
     if (0 < sid && sid <= max_subject_id_) {
         uint c_set_id = AccessToDAA(spo_, (sid - 1) * 2);
-        const auto& char_set = subject_characteristic_set_[c_set_id - 1];
-
+        const auto& char_set = GetCharacteristicSet(subject_characteristic_set_, c_set_id);
         auto it = std::lower_bound(char_set.begin(), char_set.end(), pid);
 
         if (it != char_set.end() && *it == pid) {
@@ -473,8 +495,7 @@ std::shared_ptr<std::vector<uint>> IndexRetriever::GetByOP(uint oid, uint pid) {
         if (oid > dict_.shared_cnt())
             oid -= dict_.subject_cnt();
         uint c_set_id = AccessToDAA(ops_, (oid - 1) * 2);
-
-        const auto& char_set = object_characteristic_set_[c_set_id - 1];
+        const auto& char_set = GetCharacteristicSet(object_characteristic_set_, c_set_id);
         auto it = std::lower_bound(char_set.begin(), char_set.end(), pid);
 
         if (it != char_set.end() && *it == pid) {
@@ -497,8 +518,8 @@ std::shared_ptr<std::vector<uint>> IndexRetriever::GetBySO(uint sid, uint oid) {
 
         uint s_c_set_id = AccessToDAA(spo_, (sid - 1) * 2);
         uint o_c_set_id = AccessToDAA(ops_, ops_daa_offset);
-        std::vector<uint>& s_c_set = subject_characteristic_set_[s_c_set_id - 1];
-        std::vector<uint>& o_c_set = object_characteristic_set_[o_c_set_id - 1];
+        std::vector<uint>& s_c_set = GetCharacteristicSet(subject_characteristic_set_, s_c_set_id);
+        std::vector<uint>& o_c_set = GetCharacteristicSet(object_characteristic_set_, o_c_set_id);
 
         for (uint i = 0; i < s_c_set.size(); i++) {
             for (uint j = 0; j < o_c_set.size(); j++) {

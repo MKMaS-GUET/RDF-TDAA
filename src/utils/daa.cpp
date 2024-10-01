@@ -5,9 +5,9 @@ DAA::DAA(std::vector<std::vector<uint>>& arrays) {
 }
 
 DAA::~DAA() {
-    delete[] levels_;
-    delete[] level_end_;
-    delete[] array_end_;
+    delete[] levels;
+    delete[] level_end;
+    delete[] array_end;
 }
 
 void DAA::create(std::vector<std::vector<uint>>& arrays) {
@@ -21,39 +21,39 @@ void DAA::create(std::vector<std::vector<uint>>& arrays) {
     for (uint i = 0; i < level_cnt; i++)
         level_size[i] = 0;
 
-    data_cnt_ = 0;
+    data_cnt = 0;
     for (uint i = 0; i < arrays.size(); i++) {
         for (uint j = 0; j < arrays[i].size(); j++) {
             level_size[j]++;
-            data_cnt_++;
+            data_cnt++;
         }
     }
 
-    level_end_ = (char*)malloc((data_cnt_ + 7) / 8);
-    levels_ = (uint*)malloc(sizeof(uint) * data_cnt_);
-    array_end_ = (char*)malloc((data_cnt_ + 7) / 8);
+    level_end = (char*)malloc((data_cnt + 7) / 8);
+    levels = (uint*)malloc(sizeof(uint) * data_cnt);
+    array_end = (char*)malloc((data_cnt + 7) / 8);
     uint* contB = (uint*)malloc(sizeof(uint) * level_cnt + 1);
 
-    for (uint i = 0; i < (data_cnt_ + 7) / 8; i++) {
-        level_end_[i] = 0;
-        array_end_[i] = 0;
+    for (uint i = 0; i < (data_cnt + 7) / 8; i++) {
+        level_end[i] = 0;
+        array_end[i] = 0;
     }
 
     // uint indexLevel = 0;
     contB[0] = 0;
     for (uint j = 0; j < level_cnt; j++) {
         contB[j + 1] = contB[j] + level_size[j];
-        bit_set(level_end_, contB[j + 1] - 1);
+        bit_set(level_end, contB[j + 1] - 1);
     }
 
     uint top_level;
     for (uint i = 0; i < arrays.size(); i++) {
         top_level = arrays[i].size() - 1;
         for (uint j = 0; j <= top_level; j++) {
-            levels_[contB[j]] = arrays[i][j];
+            levels[contB[j]] = arrays[i][j];
             contB[j]++;
         }
-        bit_set(array_end_, contB[top_level] - 1);
+        bit_set(array_end, contB[top_level] - 1);
     }
 
     free(contB);

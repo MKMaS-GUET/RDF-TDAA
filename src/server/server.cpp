@@ -55,7 +55,7 @@ void Endpoint::query(const httplib::Request& req, httplib::Response& res) {
 
             auto last = results_id.end();
             const auto& modifier = parser->project_modifier();
-            if (modifier.modifier_type_ == SPARQLParser::ProjectModifier::Distinct) {
+            if (modifier.modifier_type == SPARQLParser::ProjectModifier::Distinct) {
                 uint variable_cnt = query_plan->value2variable().size();
 
                 if (variable_cnt != variable_indexes.size()) {
@@ -65,7 +65,7 @@ void Endpoint::query(const httplib::Request& req, httplib::Response& res) {
 
                     std::set<uint> indexes_to_remove;
                     for (const auto& idx : variable_indexes)
-                        indexes_to_remove.insert(idx.priority_);
+                        indexes_to_remove.insert(idx.priority);
 
                     not_projection_variable_index.erase(
                         std::remove_if(
@@ -84,7 +84,7 @@ void Endpoint::query(const httplib::Request& req, httplib::Response& res) {
                                    [&](const std::vector<uint>& a, const std::vector<uint>& b) {
                                        return std::all_of(variable_indexes.begin(), variable_indexes.end(),
                                                           [&](PlanGenerator::Variable v) {
-                                                              return a[v.priority_] == b[v.priority_];
+                                                              return a[v.priority] == b[v.priority];
                                                           });
                                    });
             }
@@ -95,7 +95,7 @@ void Endpoint::query(const httplib::Request& req, httplib::Response& res) {
                 writer.StartArray();
                 for (uint i = 0; i < variable_indexes.size(); i++) {
                     auto& idx = variable_indexes[i];
-                    writer.String(db_index->ID2String(item[idx.priority_], idx.position_));
+                    writer.String(db_index->ID2String(item[idx.priority], idx.position));
                 }
                 writer.EndArray();
             }

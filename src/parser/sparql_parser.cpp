@@ -3,45 +3,45 @@
 #include <iomanip>
 #include <iostream>
 
-SPARQLParser::ParserException::ParserException(std::string message) : message_(std::move(message)) {}
+SPARQLParser::ParserException::ParserException(std::string message) : message(std::move(message)) {}
 
-SPARQLParser::ParserException::ParserException(const char* message) : message_(message) {}
+SPARQLParser::ParserException::ParserException(const char* message) : message(message) {}
 
 const char* SPARQLParser::ParserException::what() const noexcept {
-    return message_.c_str();
+    return message.c_str();
 }
 
 std::string SPARQLParser::ParserException::to_string() const {
-    return message_;
+    return message;
 }
 
-SPARQLParser::Term::Term() : type_(Type::kBlank), literal_type_(ValueType::kNone), value_() {}
+SPARQLParser::Term::Term() : type(Type::kBlank), literal_type(ValueType::kNone), value() {}
 
 SPARQLParser::Term::Term(Type type, ValueType literal_type, std::string value)
-    : type_(type), literal_type_(literal_type), value_(std::move(value)) {}
+    : type(type), literal_type(literal_type), value(std::move(value)) {}
 
 bool SPARQLParser::Term::IsVariable() const {
-    return type_ == Type::kVariable;
+    return type == Type::kVariable;
 }
 
 SPARQLParser::TriplePattern::TriplePattern(Term subj, Term pred, Term obj, bool is_option, uint variale_cnt)
-    : subject_(std::move(subj)),
-      predicate_(std::move(pred)),
-      object_(std::move(obj)),
-      is_option_(is_option),
-      variale_cnt_(variale_cnt) {}
+    : subject(std::move(subj)),
+      predicate(std::move(pred)),
+      object(std::move(obj)),
+      is_option(is_option),
+      variale_cnt(variale_cnt) {}
 
 SPARQLParser::TriplePattern::TriplePattern(Term subj, Term pred, Term obj)
-    : subject_(std::move(subj)),
-      predicate_(std::move(pred)),
-      object_(std::move(obj)),
-      is_option_(false),
-      variale_cnt_(0) {}
+    : subject(std::move(subj)),
+      predicate(std::move(pred)),
+      object(std::move(obj)),
+      is_option(false),
+      variale_cnt(0) {}
 
-SPARQLParser::ProjectModifier::ProjectModifier(Type modifierType) : modifier_type_(modifierType) {}
+SPARQLParser::ProjectModifier::ProjectModifier(Type modifierType) : modifier_type(modifierType) {}
 
 std::string SPARQLParser::ProjectModifier::toString() const {
-    switch (modifier_type_) {
+    switch (modifier_type) {
         case Type::None:
             return "Modifier::Type::None";
         case Type::Distinct:
@@ -68,9 +68,9 @@ void SPARQLParser::parse() {
         project_variables_.clear();
         std::set<std::string> variables_set;
         for (const auto& item : triple_patterns_) {
-            const auto& s = item.subject_.value_;
-            const auto& p = item.predicate_.value_;
-            const auto& o = item.object_.value_;
+            const auto& s = item.subject.value;
+            const auto& p = item.predicate.value;
+            const auto& o = item.object.value;
             if (s[0] == '?')
                 variables_set.insert(s);
             if (p[0] == '?')
@@ -162,31 +162,31 @@ void SPARQLParser::ParseFilter() {
     }
     std::string variable = sparql_lexer_.GetCurrentTokenValue();
     Filter filter;
-    filter.variable_str_ = variable;
+    filter.variable_str = variable;
     auto token = sparql_lexer_.GetNextTokenType();
     switch (token) {
         case SPARQLLexer::TokenT::kEqual:
-            filter.filter_type_ = Filter::Type::Equal;
+            filter.filter_type = Filter::Type::Equal;
             break;
         case SPARQLLexer::TokenT::kNotEqual:
-            filter.filter_type_ = Filter::Type::NotEqual;
+            filter.filter_type = Filter::Type::NotEqual;
             break;
         case SPARQLLexer::TokenT::kLess:
-            filter.filter_type_ = Filter::Type::Less;
+            filter.filter_type = Filter::Type::Less;
             break;
         case SPARQLLexer::TokenT::kLessOrEq:
-            filter.filter_type_ = Filter::Type::LessOrEq;
+            filter.filter_type = Filter::Type::LessOrEq;
             break;
         case SPARQLLexer::TokenT::kGreater:
-            filter.filter_type_ = Filter::Type::Greater;
+            filter.filter_type = Filter::Type::Greater;
             break;
         case SPARQLLexer::TokenT::kGreaterOrEq:
-            filter.filter_type_ = Filter::Type::GreaterOrEq;
+            filter.filter_type = Filter::Type::GreaterOrEq;
             break;
         default:
-            filter.filter_type_ = Filter::Type::Function;
+            filter.filter_type = Filter::Type::Function;
             std::string function_name = sparql_lexer_.GetCurrentTokenValue();
-            filter.filter_args_.push_back(MakeFunctionLiteral(function_name));
+            filter.filter_args.push_back(MakeFunctionLiteral(function_name));
             break;
     }
     bool is_finish = false;
@@ -201,19 +201,19 @@ void SPARQLParser::ParseFilter() {
             case SPARQLLexer::TokenT::kString: {
                 std::string value = sparql_lexer_.GetCurrentTokenValue();
                 auto string_elem = MakeStringLiteral(value);
-                filter.filter_args_.push_back(string_elem);
+                filter.filter_args.push_back(string_elem);
             } break;
             case SPARQLLexer::TokenT::kNumber: {
                 std::string value = sparql_lexer_.GetCurrentTokenValue();
                 auto double_elem = MakeDoubleLiteral(value);
-                filter.filter_args_.push_back(double_elem);
+                filter.filter_args.push_back(double_elem);
             } break;
             default:
                 throw ParserException("Parse filter failed when meet :" +
                                       sparql_lexer_.GetCurrentTokenValue());
         }
     }
-    filters_[filter.variable_str_] = filter;
+    filters_[filter.variable_str] = filter;
 }
 
 void SPARQLParser::ParseGroupGraphPattern() {
@@ -289,7 +289,7 @@ void SPARQLParser::ParseBasicGraphPattern(bool is_option) {
             default:
                 throw ParserException("Except variable or IRI or Literal or Blank");
         }
-        term.position_ = SPARQLParser::Term::Positon(i);
+        term.position = SPARQLParser::Term::Positon(i);
         pattern_term[i] = term;
     }
     auto token_t = sparql_lexer_.GetNextTokenType();
@@ -375,7 +375,7 @@ const std::vector<SPARQLParser::TriplePattern>& SPARQLParser::TriplePatterns() c
 std::vector<std::vector<std::string>> SPARQLParser::TripleList() const {
     std::vector<std::vector<std::string>> list;
     for (const auto& item : triple_patterns_) {
-        list.push_back({item.subject_.value_, item.predicate_.value_, item.object_.value_});
+        list.push_back({item.subject.value, item.predicate.value, item.object.value});
     }
     return list;
 }

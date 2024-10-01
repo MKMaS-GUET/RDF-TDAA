@@ -12,14 +12,14 @@ class QueryExecutor {
     using Rtype = PlanGenerator::Item::RType;
 
     struct Stat {
-        bool at_end_;
-        int level_;
+        bool at_end;
+        int level;
         // 用于记录每一个 level_ 的 candidate_result_ 已经处理过的结果的 id
-        std::vector<uint> current_tuple_;
-        std::vector<std::shared_ptr<std::vector<uint>>> candidate_value_;
-        std::vector<uint> candidate_indices_;
-        std::vector<std::vector<uint>> result_;
-        std::vector<std::vector<PlanGenerator::Item>> plan_;
+        std::vector<uint> current_tuple;
+        std::vector<std::shared_ptr<std::vector<uint>>> candidate_value;
+        std::vector<uint> candidate_indices;
+        std::vector<std::vector<uint>> result;
+        std::vector<std::vector<PlanGenerator::Item>> plan;
 
         Stat(const std::vector<std::vector<PlanGenerator::Item>>& p);
 

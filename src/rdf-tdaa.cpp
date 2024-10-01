@@ -25,7 +25,7 @@ uint QueryResult(std::vector<std::vector<uint>>& result,
     const auto variable_indexes = query_plan->MappingVariable(parser->ProjectVariables());
 
     uint cnt = 0;
-    if (modifier.modifier_type_ == SPARQLParser::ProjectModifier::Distinct) {
+    if (modifier.modifier_type == SPARQLParser::ProjectModifier::Distinct) {
         uint variable_cnt = query_plan->value2variable().size();
 
         if (variable_cnt != variable_indexes.size()) {
@@ -35,7 +35,7 @@ uint QueryResult(std::vector<std::vector<uint>>& result,
 
             std::set<uint> indexes_to_remove;
             for (const auto& idx : variable_indexes)
-                indexes_to_remove.insert(idx.priority_);
+                indexes_to_remove.insert(idx.priority);
 
             not_projection_variable_index.erase(
                 std::remove_if(
@@ -54,17 +54,16 @@ uint QueryResult(std::vector<std::vector<uint>>& result,
                            // 判断两个列表 a 和 b 是否相同，
                            [&](const std::vector<uint>& a, const std::vector<uint>& b) {
                                // std::all_of 可以用来判断数组中的值是否都满足一个条件
-                               return std::all_of(variable_indexes.begin(), variable_indexes.end(),
-                                                  // 判断依据是，列表中的每一个元素都相同
-                                                  [&](PlanGenerator::Variable v) {
-                                                      return a[v.priority_] == b[v.priority_];
-                                                  });
+                               return std::all_of(
+                                   variable_indexes.begin(), variable_indexes.end(),
+                                   // 判断依据是，列表中的每一个元素都相同
+                                   [&](PlanGenerator::Variable v) { return a[v.priority] == b[v.priority]; });
                            });
     }
     for (auto it = result.begin(); it != last; ++it) {
         const auto& item = *it;
         for (const auto& idx : variable_indexes) {
-            std::cout << index->ID2String(item[idx.priority_], idx.position_) << " ";
+            std::cout << index->ID2String(item[idx.priority], idx.position) << " ";
         }
         cnt++;
         std::cout << std::endl;

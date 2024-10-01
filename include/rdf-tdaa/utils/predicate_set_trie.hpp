@@ -7,12 +7,14 @@
 #include <stack>
 #include <vector>
 
-struct PredicateSetTrie {
+class PredicateSetTrie {
     phmap::btree_map<ulong, uint> next_;
     uint cnt_;
     uint set_cnt_;
     phmap::flat_hash_map<uint, uint> exist_;
+    void dfs(uint node_id, std::vector<uint>& path, std::vector<std::vector<uint>>& result);
 
+   public:
     PredicateSetTrie();
     ~PredicateSetTrie();
 
@@ -21,9 +23,6 @@ struct PredicateSetTrie {
     uint find(std::vector<uint>& set);
 
     void traverse(std::vector<std::vector<uint>>& result);
-
-   private:
-    void dfs(uint node_id, std::vector<uint>& path, std::vector<std::vector<uint>>& result);
 };
 
 #endif

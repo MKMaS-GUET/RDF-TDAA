@@ -3,14 +3,14 @@
 
 void IndexBuilder::PredicateIndex::Build(std::vector<std::pair<uint, uint>>& so_pairs) {
     for (const auto& so : so_pairs) {
-        s_set_.insert(so.first);
-        o_set_.insert(so.second);
+        s_set.insert(so.first);
+        o_set.insert(so.second);
     }
 }
 
 void IndexBuilder::PredicateIndex::Clear() {
-    phmap::btree_set<uint>().swap(s_set_);
-    phmap::btree_set<uint>().swap(o_set_);
+    phmap::btree_set<uint>().swap(s_set);
+    phmap::btree_set<uint>().swap(o_set);
 }
 
 IndexBuilder::IndexBuilder(std::string db_name, std::string data_file) {
@@ -93,8 +93,8 @@ void IndexBuilder::StorePredicateIndexNoCompress(std::vector<PredicateIndex>& pr
 
     ulong predicate_index_arrays_file_size = 0;
     for (uint pid = 1; pid <= dict_.predicate_cnt(); pid++) {
-        predicate_index_arrays_file_size += ulong(predicate_indexes[pid - 1].s_set_.size() * 4ul);
-        predicate_index_arrays_file_size += ulong(predicate_indexes[pid - 1].o_set_.size() * 4ul);
+        predicate_index_arrays_file_size += ulong(predicate_indexes[pid - 1].s_set.size() * 4ul);
+        predicate_index_arrays_file_size += ulong(predicate_indexes[pid - 1].o_set.size() * 4ul);
     }
     MMap<uint> predicate_index_ =
         MMap<uint>(db_index_path_ + "predicate_index", dict_.predicate_cnt() * 2 * 4);
@@ -105,8 +105,8 @@ void IndexBuilder::StorePredicateIndexNoCompress(std::vector<PredicateIndex>& pr
     phmap::btree_set<uint>* ps_set;
     phmap::btree_set<uint>* po_set;
     for (uint pid = 1; pid <= dict_.predicate_cnt(); pid++) {
-        ps_set = &predicate_indexes[pid - 1].s_set_;
-        po_set = &predicate_indexes[pid - 1].o_set_;
+        ps_set = &predicate_indexes[pid - 1].s_set;
+        po_set = &predicate_indexes[pid - 1].o_set;
 
         predicate_index_[(pid - 1) * 2] = arrays_file_offset;
         for (auto it = ps_set->begin(); it != ps_set->end(); it++) {
@@ -148,8 +148,8 @@ void IndexBuilder::StorePredicateIndex(std::vector<PredicateIndex>& predicate_in
     ulong compressed_size;
     uint last;
     for (uint pid = 1; pid <= dict_.predicate_cnt(); pid++) {
-        ps_set = &predicate_indexes[pid - 1].s_set_;
-        po_set = &predicate_indexes[pid - 1].o_set_;
+        ps_set = &predicate_indexes[pid - 1].s_set;
+        po_set = &predicate_indexes[pid - 1].o_set;
 
         buffer_offset = 0;
         last = 0;
@@ -230,41 +230,57 @@ void IndexBuilder::BuildCharacteristicSet(std::vector<std::pair<uint, uint>>& to
         }
     }
 
-    // using dict trie to unique sets
     PredicateSetTrie trie = PredicateSetTrie();
     uint max_id = 0;
     uint present_id;
-    ulong serialize_size = 0;
-    std::vector<uint> unique_offset;
-    for (uint i = 0; i < predicate_sets.size(); i++) {
-        present_id = trie.insert(predicate_sets[i]);
-        to_set_id[i] = {present_id, predicate_sets[i].size()};
+
+    std::vector<std::pair<uint8_t*, uint>> compressed_sets;
+    std::vector<uint> original_size;
+    ulong compressed_size = 0;
+
+    for (uint set_id = 0; set_id < predicate_sets.size(); set_id++) {
+        present_id = trie.insert(predicate_sets[set_id]);
+        to_set_id[set_id] = {present_id, predicate_sets[set_id].size()};
         if (present_id > max_id) {
-            serialize_size += predicate_sets[i].size() + 1;
-            unique_offset.push_back(i);
             max_id = present_id;
+            uint last = 0;
+            for (uint i = 0; i < predicate_sets[set_id].size() - 1; i++) {
+                last += predicate_sets[set_id][i];
+                predicate_sets[set_id][i + 1] -= last;
+            }
+            auto compressed_set = Compress(predicate_sets[set_id].data(), predicate_sets[set_id].size());
+            compressed_size += compressed_set.second;
+            compressed_sets.push_back(compressed_set);
+            original_size.push_back(predicate_sets[set_id].size());
         }
     }
-    // std::cout << predicate_sets.size() << std::endl;
-    // std::cout << trie.set_cnt_ - 1 << std::endl;
-
-    // prepare for serializing
-    uint* serialize_data = new uint[serialize_size];
-    ulong offset = 0;
-    for (uint i = 0; i < unique_offset.size(); i++) {
-        std::vector<uint>& set = predicate_sets[unique_offset[i]];
-        std::copy(set.begin(), set.end(), serialize_data + offset);
-        offset += set.size();
-        serialize_data[offset++] = 0;
-    }
+    trie.~PredicateSetTrie();
 
     std::string file_name = (order == Order::kSPO) ? "s_c_sets" : "o_c_sets";
 
-    // serializing
-    CompressAndSave(serialize_data, serialize_size, db_index_path_ + file_name);
-    delete[] serialize_data;
+    uint base = (compressed_sets.size() * 2 + 1) * 4;
+
+    MMap<uint> c_sets_offset_size =
+        MMap<uint>(db_index_path_ + file_name, compressed_sets.size() * 4 + compressed_size);
+    c_sets_offset_size.Write(compressed_sets.size());
+    uint offset = 0;
+    for (uint set_id = 1; set_id <= compressed_sets.size(); set_id++) {
+        offset += compressed_sets[set_id - 1].second;
+        c_sets_offset_size.Write(offset);
+        c_sets_offset_size.Write(original_size[set_id - 1]);
+    }
+    c_sets_offset_size.CloseMap();
+
+    MMap<uint8_t> c_sets = MMap<uint8_t>(db_index_path_ + file_name, base + offset);
+    offset = 0;
+    for (uint set_id = 1; set_id <= compressed_sets.size(); set_id++) {
+        for (uint i = 0; i < compressed_sets[set_id - 1].second; i++)
+            c_sets[base + offset + i] = compressed_sets[set_id - 1].first[i];
+        offset += compressed_sets[set_id - 1].second;
+    }
+    c_sets.CloseMap();
+
     std::vector<std::vector<uint>>().swap(predicate_sets);
-    trie.~PredicateSetTrie();
 }
 
 uint IndexBuilder::BuildEntitySets(std::vector<std::pair<uint, uint>>& to_set_id,
@@ -367,16 +383,16 @@ void IndexBuilder::BuildAndSaveIndex(std::vector<std::pair<uint, uint>>& to_set_
     for (uint id = 1; id <= entity_cnt; id++) {
         DAA daa = DAA(entity_set[id - 1]);
 
-        daa_file_offset += daa.data_cnt_;
+        daa_file_offset += daa.data_cnt;
         daa_offsets[id - 1] = daa_file_offset;
 
         if (to_set_id[id - 1].first > max_characteristic_set_id)
             max_characteristic_set_id = to_set_id[id - 1].first;
 
-        for (uint levels_offset = 0; levels_offset < daa.data_cnt_; levels_offset++) {
+        for (uint levels_offset = 0; levels_offset < daa.data_cnt; levels_offset++) {
             if (compress_levels_) {
                 for (uint i = 0; i < levels_width; i++) {
-                    if (daa.levels_[levels_offset] & (1 << (levels_width - 1 - i)))
+                    if (daa.levels[levels_offset] & (1 << (levels_width - 1 - i)))
                         levels_buffer |= 1 << levels_buffer_offset;
                     if (levels_buffer_offset == 0) {
                         daa_levels.Write(levels_buffer);
@@ -386,12 +402,12 @@ void IndexBuilder::BuildAndSaveIndex(std::vector<std::pair<uint, uint>>& to_set_
                     levels_buffer_offset--;
                 }
             } else {
-                daa_levels.Write(daa.levels_[levels_offset]);
+                daa_levels.Write(daa.levels[levels_offset]);
             }
 
-            if (daa.level_end_[levels_offset / 8] & (1 << (7 - levels_offset % 8)))
+            if (daa.level_end[levels_offset / 8] & (1 << (7 - levels_offset % 8)))
                 level_end_buffer |= 1 << end_buffer_offset;
-            if (daa.array_end_[levels_offset / 8] & (1 << (7 - levels_offset % 8)))
+            if (daa.array_end[levels_offset / 8] & (1 << (7 - levels_offset % 8)))
                 array_end_buffer |= 1 << end_buffer_offset;
             if (end_buffer_offset == 0) {
                 daa_level_end.Write(level_end_buffer);
@@ -501,6 +517,7 @@ bool IndexBuilder::Build() {
     std::cout << "build predicate index takes " << diff.count() << " ms." << std::endl;
 
     beg = std::chrono::high_resolution_clock::now();
+    // entity_id -> (predicat_set_id, set_size)
     std::vector<std::pair<uint, uint>> subject_to_set_id;
     std::vector<std::pair<uint, uint>> object_to_set_id;
     std::thread s_t(

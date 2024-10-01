@@ -9,10 +9,10 @@
 #define bit_get(bits, offset) (((bits)[(offset) / 8] >> (7 - (offset) % 8)) & 1)
 
 struct DAA {
-    uint data_cnt_;
-    uint* levels_;
-    char* level_end_;
-    char* array_end_;
+    uint data_cnt;
+    uint* levels;
+    char* level_end;
+    char* array_end;
 
     void create(std::vector<std::vector<uint>>& arrays);
 

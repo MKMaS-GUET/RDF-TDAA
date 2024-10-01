@@ -23,8 +23,8 @@ namespace fs = std::filesystem;
 
 class IndexBuilder {
     struct PredicateIndex {
-        phmap::btree_set<uint> s_set_;
-        phmap::btree_set<uint> o_set_;
+        phmap::btree_set<uint> s_set;
+        phmap::btree_set<uint> o_set;
 
         void Build(std::vector<std::pair<uint, uint>>& so_pairs);
 

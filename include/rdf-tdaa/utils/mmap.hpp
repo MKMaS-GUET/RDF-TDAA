@@ -7,7 +7,7 @@
 #include <string>
 
 template <typename T>
-struct MMap {
+class MMap {
    private:
     void Create(std::string path, ulong size) {
         fd_ = open((path).c_str(), O_RDWR | O_CREAT, (mode_t)0600);

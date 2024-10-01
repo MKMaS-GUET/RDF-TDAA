@@ -15,7 +15,7 @@
 class SPARQLParser {
    public:
     struct ParserException : public std::exception {
-        std::string message_;
+        std::string message;
 
         explicit ParserException(std::string message);
 
@@ -31,10 +31,10 @@ class SPARQLParser {
         enum ValueType { kInteger, kDouble, kString, kFunction, kNone };
         enum Positon { kSubject, kPredicate, kObject, kShared };
 
-        Type type_;
-        ValueType literal_type_;
-        std::string value_;
-        Positon position_;
+        Type type;
+        ValueType literal_type;
+        std::string value;
+        Positon position;
 
         Term();
 
@@ -44,11 +44,11 @@ class SPARQLParser {
     };
 
     struct TriplePattern {
-        Term subject_;
-        Term predicate_;
-        Term object_;
-        bool is_option_;
-        uint variale_cnt_;
+        Term subject;
+        Term predicate;
+        Term object;
+        bool is_option;
+        uint variale_cnt;
 
         TriplePattern(Term subject, Term predicate, Term object, bool is_option, uint variale_cnt);
 
@@ -58,16 +58,16 @@ class SPARQLParser {
     // TODO: Filter need to be imporoved
     struct Filter {
         enum Type { Equal, NotEqual, Less, LessOrEq, Greater, GreaterOrEq, Function };
-        Type filter_type_;
-        std::string variable_str_;
+        Type filter_type;
+        std::string variable_str;
         // if Type == Function then filter_args[0] is functions_register_name
-        std::vector<Term> filter_args_;
+        std::vector<Term> filter_args;
     };
 
     struct ProjectModifier {
         enum Type { None, Distinct, Reduced, Count, Duplicates };
 
-        Type modifier_type_;
+        Type modifier_type;
 
         ProjectModifier(Type modifierType);
 

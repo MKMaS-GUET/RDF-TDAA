@@ -4,7 +4,7 @@
 #include <iostream>
 #include "streamvbyte.h"
 
-void CompressAndSave(uint* data, uint size, std::string filename) {
+std::pair<uint8_t*, uint> Compress(uint* data, uint size) {
     if (size > UINT_MAX)
         std::cout << "error size: " << size << std::endl;
 
@@ -13,7 +13,13 @@ void CompressAndSave(uint* data, uint size, std::string filename) {
 
     uint compressed_length = streamvbyte_encode(data, size, compressed_buffer);  // encoding
 
+    return {compressed_buffer, compressed_length};
+}
+
+void CompressAndSave(uint* data, uint size, std::string filename) {
     std::ofstream outfile(filename, std::ios::binary);
+
+    auto [compressed_buffer, compressed_length] = Compress(data, size);
 
     outfile.write(reinterpret_cast<const char*>(&size), sizeof(size));
     outfile.write(reinterpret_cast<const char*>(&compressed_length), sizeof(compressed_length));
@@ -21,6 +27,13 @@ void CompressAndSave(uint* data, uint size, std::string filename) {
     outfile.close();
 
     delete[] compressed_buffer;
+}
+
+uint32_t* Decompress(uint8_t* compressed_buffer, uint total_length) {
+    uint32_t* recovdata = new uint32_t[total_length];
+    streamvbyte_decode(compressed_buffer, recovdata, total_length);
+    delete[] compressed_buffer;
+    return recovdata;
 }
 
 std::pair<uint*, uint> LoadAndDecompress(std::string filename) {
@@ -35,8 +48,5 @@ std::pair<uint*, uint> LoadAndDecompress(std::string filename) {
     infile.read(reinterpret_cast<char*>(compressed_buffer), compressed_length);
     infile.close();
 
-    uint32_t* recovdata = new uint32_t[total_length];
-    streamvbyte_decode(compressed_buffer, recovdata, total_length);
-    delete[] compressed_buffer;
-    return {recovdata, total_length};
+    return {Decompress(compressed_buffer, total_length), total_length};
 }

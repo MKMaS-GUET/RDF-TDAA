@@ -21,13 +21,13 @@ class PlanGenerator {
         enum RType { kSP, kOP, kSO, kNone };
         enum PType { kPreSub, kPreObj, kSubject, kPredicate, kObject, kEmpty };
 
-        RType retrieval_type_;
-        PType prestore_type_;
-        std::shared_ptr<std::vector<uint>> index_result_;
+        RType retrieval_type;
+        PType prestore_type;
+        std::shared_ptr<std::vector<uint>> index_result;
 
-        uint triple_pattern_id_;
-        uint search_id_;
-        uint empty_item_level_;
+        uint triple_pattern_id;
+        uint search_id;
+        uint empty_item_level;
 
         Item() = default;
 
@@ -37,10 +37,10 @@ class PlanGenerator {
     };
 
     struct Variable {
-        std::string value_;
-        uint priority_;
-        uint count_;
-        SPARQLParser::Term::Positon position_;
+        std::string value;
+        uint priority;
+        uint count;
+        SPARQLParser::Term::Positon position;
 
         Variable();
         Variable(std::string value);
