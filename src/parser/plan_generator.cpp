@@ -368,7 +368,6 @@ void PlanGenerator::GenPlanTable() {
             uint sid = index_->Term2ID(s);
             uint pid = index_->Term2ID(p);
             std::shared_ptr<std::vector<uint>> r = index_->GetBySP(sid, pid);
-            // pre_results_[o_var_id].push_back(r);
             if (r)
                 pre_results_[o_var_id].push_back(r);
             else

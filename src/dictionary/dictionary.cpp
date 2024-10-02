@@ -38,28 +38,43 @@ Dictionary::Dictionary(std::string& dict_path) : dict_path_(dict_path) {
     id2predicate_ = std::vector<std::string>(predicate_cnt_ + 1);
     LoadPredicate(id2predicate_, predicate2id_);
 
-    std::thread t1([&]() {
-        if (menagement_data[4] == 32)
-            id2subject_ = Node<uint>(dict_path_ + "/subjects/");
+    auto process_id2entity = [&](ulong type, std::string file_name,
+                                 std::variant<Node<uint>, Node<ulong>>& id2entity) {
+        if (type == 32)
+            id2entity = Node<uint>(dict_path_ + file_name);
         else
-            id2subject_ = Node<ulong>(dict_path_ + "/subjects/");
-    });
-    std::thread t2([&]() {
-        if (menagement_data[5] == 32)
-            id2object_ = Node<uint>(dict_path_ + "/objects/");
-        else
-            id2object_ = Node<ulong>(dict_path_ + "/objects/");
-    });
-    std::thread t3([&]() {
-        if (menagement_data[6] == 32)
-            id2shared_ = Node<uint>(dict_path_ + "/shared/");
-        else
-            id2shared_ = Node<ulong>(dict_path_ + "/shared/");
-    });
+            id2entity = Node<ulong>(dict_path_ + file_name);
+    };
 
+    auto build_cache = [&](uint start, uint end) {
+        for (uint id = start; id <= end; id += 10) {
+            if (id <= shared_cnt())
+                delete[] ID2String(id, SPARQLParser::Term::Positon::kShared);
+            else if (id <= shared_cnt() + subject_cnt())
+                delete[] ID2String(id, SPARQLParser::Term::Positon::kSubject);
+            else
+                delete[] ID2String(id, SPARQLParser::Term::Positon::kObject);
+        }
+    };
+
+    std::thread t1([&]() { process_id2entity(menagement_data[4], "/subjects/", id2subject_); });
+    std::thread t2([&]() { process_id2entity(menagement_data[5], "/objects/", id2object_); });
+    std::thread t3([&]() { process_id2entity(menagement_data[6], "/shared/", id2shared_); });
     t1.join();
     t2.join();
     t3.join();
+
+    uint cpu_count = std::thread::hardware_concurrency();
+    uint batch_size = (shared_cnt() + subject_cnt() + object_cnt()) / cpu_count;
+    std::vector<std::thread> threads;
+    for (uint i = 0; i < cpu_count; i++) {
+        uint start = i * batch_size + 1;
+        uint end = (i + 1) * batch_size;
+        threads.emplace_back(std::thread([start, end, &build_cache]() { build_cache(start, end); }));
+    }
+    for (auto& t : threads)
+        t.join();
+
     menagement_data.CloseMap();
 }
 

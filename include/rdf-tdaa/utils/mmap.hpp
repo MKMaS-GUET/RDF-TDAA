@@ -4,6 +4,7 @@
 #include <fcntl.h>
 #include <sys/mman.h>
 #include <unistd.h>
+#include <fstream>
 #include <string>
 
 template <typename T>
@@ -11,17 +12,13 @@ class MMap {
    private:
     void Create(std::string path, ulong size) {
         fd_ = open((path).c_str(), O_RDWR | O_CREAT, (mode_t)0600);
-        if (size == 0) {
-            close(fd_);
-            return;
-        }
 
         if (fd_ == -1) {
             perror("Error opening file for mmap");
             exit(1);
         }
 
-        if (ftruncate(fd_, size) == -1) {
+        if (size == 0 || ftruncate(fd_, size) == -1) {
             perror("Error truncating file for mmap");
             close(fd_);
             exit(1);

@@ -1,51 +1,6 @@
 #include "rdf-tdaa/index/index_retriever.hpp"
 #include "rdf-tdaa/utils/vbyte.hpp"
 
-One::One(MMap<char>& bits, uint begin, uint end) : bits_(bits), bit_offset_(begin), end_(end) {}
-
-void printBits(uint num, uint width) {
-    for (int i = width - 1; i >= 0; --i) {
-        uint bit = (num >> i) & 1;
-        std::cout << bit;
-    }
-}
-
-// next one in [begin, end)
-uint One::Next() {
-    for (; bit_offset_ < end_; bit_offset_++) {
-        if (bits_[bit_offset_ / 8] != 0) {
-            if (bits_[bit_offset_ / 8] & 1 << (7 - bit_offset_ % 8)) {
-                bit_offset_++;
-                return bit_offset_ - 1;
-            }
-        } else {
-            bit_offset_ = bit_offset_ - bit_offset_ % 8 + 7;
-        }
-    }
-    return end_;
-}
-
-// ones in [begin, end)
-uint range_rank(MMap<char>& bits, uint begin, uint end) {
-    uint cnt = 0;
-    for (uint bit_offset = begin; bit_offset < end; bit_offset++) {
-        if (bits[bit_offset / 8] != 0) {
-            if (bits[bit_offset / 8] & 1 << (7 - bit_offset % 8))
-                cnt++;
-        } else {
-            bit_offset = bit_offset - bit_offset % 8 + 7;
-        }
-    }
-    return cnt;
-}
-
-IndexRetriever::CharacteristicSet::CharacteristicSet() {}
-
-IndexRetriever::CharacteristicSet::CharacteristicSet(uint cnt) : count(cnt) {
-    offset_size = std::vector<std::pair<uint, uint>>(cnt);
-    sets = std::vector<std::vector<uint>>(cnt);
-}
-
 IndexRetriever::IndexRetriever() {}
 
 IndexRetriever::IndexRetriever(std::string db_name) : db_name_(db_name) {
@@ -56,44 +11,9 @@ IndexRetriever::IndexRetriever(std::string db_name) : db_name_(db_name) {
 
     dict_ = Dictionary(db_dictionary_path_);
 
-    auto build_cache = [&](uint start, uint end) {
-        for (uint id = start; id <= end; id++) {
-            if (id <= shared_cnt()) {
-                if (id % 10 == 0)
-                    delete[] dict_.ID2String(id, SPARQLParser::Term::Positon::kShared);
-            } else if (id <= dict_.shared_cnt() + dict_.subject_cnt()) {
-                if (id % 10 == 0)
-                    delete[] dict_.ID2String(id, SPARQLParser::Term::Positon::kSubject);
-            } else {
-                if (id % 10 == 0)
-                    delete[] dict_.ID2String(id, SPARQLParser::Term::Positon::kObject);
-            }
-        }
-    };
-
-    uint cpu_count = std::thread::hardware_concurrency();
-    uint cnt = dict_.shared_cnt() + dict_.subject_cnt() + dict_.object_cnt();
-    uint batch_size = cnt / cpu_count;
-
-    std::vector<std::thread> threads;
-    for (uint i = 0; i < cpu_count; i++) {
-        uint start = i * batch_size + 1;
-        uint end = (i + 1) * batch_size;
-        threads.emplace_back(std::thread([start, end, &build_cache]() { build_cache(start, end); }));
-    }
-    for (auto& t : threads)
-        t.join();
-
     InitMMap();
     ps_sets_ = std::vector<std::shared_ptr<std::vector<uint>>>(dict_.predicate_cnt());
-    for (auto& set : ps_sets_)
-        set = std::make_shared<std::vector<uint>>();
     po_sets_ = std::vector<std::shared_ptr<std::vector<uint>>>(dict_.predicate_cnt());
-    for (auto& set : po_sets_)
-        set = std::make_shared<std::vector<uint>>();
-
-    // LoadCharacteristicSet(subject_characteristic_set_, db_index_path_ + "s_c_sets");
-    // LoadCharacteristicSet(object_characteristic_set_, db_index_path_ + "o_c_sets");
 
     max_subject_id_ = dict_.shared_cnt() + dict_.subject_cnt();
 
@@ -145,7 +65,7 @@ void IndexRetriever::InitMMap() {
         object_characteristic_set_.offset_size[set_id - 1] = {o_c_sets[2 * set_id - 1], o_c_sets[2 * set_id]};
     o_c_sets.CloseMap();
 
-    if (to_daa_compressed_ || levels_compressed_) {
+    if (spo_.to_daa_compressed_ || spo_.levels_compressed_) {
         MMap<uint> data_width = MMap<uint>(db_index_path_ + "data_width", 6 * 4);
         spo_.chara_set_id_width = data_width[0];
         spo_.daa_offset_width = data_width[1];
@@ -155,185 +75,6 @@ void IndexRetriever::InitMMap() {
         ops_.daa_levels_width = data_width[5];
         data_width.CloseMap();
     }
-}
-
-std::vector<uint>& IndexRetriever::GetCharacteristicSet(CharacteristicSet& c_set, uint c_id) {
-    c_id -= 1;
-    if (c_set.sets[c_id].size() == 0) {
-        uint offset = (c_id == 0) ? 0 : c_set.offset_size[c_id - 1].first;
-        uint buffer_size = c_set.offset_size[c_id].first - offset;
-        uint original_size = c_set.offset_size[c_id].second;
-
-        uint base = (c_set.count * 2 + 1) * 4;
-        uint8_t* compressed_buffer = new uint8_t[buffer_size];
-        for (uint i = 0; i < buffer_size; i++)
-            compressed_buffer[i] = c_set.mmap[base + offset + i];
-
-        uint32_t* original_data = Decompress(compressed_buffer, original_size);
-        for (uint i = 1; i < original_size; i++)
-            original_data[i] += original_data[i - 1];
-        c_set.sets[c_id] = std::vector<uint32_t>(original_data, original_data + original_size);
-    }
-    return c_set.sets[c_id];
-}
-
-uint IndexRetriever::AccessBitSequence(MMap<uint>& bits, uint data_width, ulong bit_start) {
-    uint uint_base = bit_start / 32;
-    uint offset_in_uint = bit_start % 32;
-
-    uint uint_cnt = (offset_in_uint + data_width + 31) / 32;
-    uint data = 0;
-    uint remaining_bits = data_width;
-
-    for (uint uint_offset = uint_base; uint_offset < uint_base + uint_cnt; uint_offset++) {
-        // 计算可以写入的位数
-        uint bits_to_write = std::min(32 - offset_in_uint, remaining_bits);
-
-        // 生成掩码
-        uint shift_to_end = 32 - (offset_in_uint + bits_to_write);
-        uint mask = ((1ull << bits_to_write) - 1) << shift_to_end;
-
-        // 提取所需位并移位到目标位置
-        uint extracted_bits = (bits[uint_offset] & mask) >> shift_to_end;
-        data |= extracted_bits << (remaining_bits - bits_to_write);
-
-        remaining_bits -= bits_to_write;
-        offset_in_uint = 0;
-    }
-
-    return data;
-}
-
-std::shared_ptr<std::vector<uint>> IndexRetriever::AccessAllArrays(DAA& daa, uint daa_offset, uint daa_size) {
-    MMap<uint>& levels = daa.daa_levels;
-    uint data_width = daa.daa_levels_width;
-    ulong bit_start = daa_offset * ulong(data_width);
-
-    uint uint_base = bit_start / 32;
-    uint offset_in_uint = bit_start % 32;
-
-    uint uint_cnt = (offset_in_uint + daa_size * data_width + 31) / 32;
-    uint data = 0;
-    uint remaining_bits = data_width;
-
-    std::vector<uint> levels_mem = std::vector<uint>();
-
-    for (uint uint_offset = uint_base; uint_offset < uint_base + uint_cnt; uint_offset++) {
-        uint bits_to_write = std::min(32 - offset_in_uint, remaining_bits);
-        uint shift_to_end = 32 - (offset_in_uint + bits_to_write);
-        uint mask = ((1ull << bits_to_write) - 1) << shift_to_end;
-
-        uint extracted_bits = (levels[uint_offset] & mask) >> shift_to_end;
-        data |= extracted_bits << (remaining_bits - bits_to_write);
-
-        remaining_bits -= bits_to_write;
-        offset_in_uint += bits_to_write;
-        if (remaining_bits == 0) {
-            levels_mem.push_back(data);
-
-            remaining_bits = data_width;
-            data = 0;
-            if (offset_in_uint != 32)
-                uint_offset--;
-        }
-        if (offset_in_uint == 32)
-            offset_in_uint = 0;
-    }
-
-    std::shared_ptr<std::vector<std::vector<uint>>> arrays;
-
-    if (daa_size == 1)
-        return std::make_shared<std::vector<uint>>(std::vector<uint>{levels_mem[0]});
-
-    std::vector<uint> level_starts;
-    One one = One(daa.daa_level_end, daa_offset, daa_offset + daa_size);
-    uint end = one.Next();
-    while (end != daa_offset + daa_size) {
-        level_starts.push_back(end + 1);
-        end = one.Next();
-    }
-    std::shared_ptr<std::vector<uint>> result = std::make_shared<std::vector<uint>>();
-
-    MMap<char>& array_end = daa.daa_array_end;
-
-    uint predicate_cnt = level_starts[0] - daa_offset;
-    for (uint p = 0; p < predicate_cnt; p++) {
-        uint offset = p;
-        uint value_cnt = 0;
-
-        uint levels_offset = daa_offset + offset;
-        result->push_back(levels_mem[levels_offset - daa_offset]);
-        uint level_start = daa_offset;
-        while (!get_bit(array_end, levels_offset)) {
-            offset = offset - range_rank(array_end, level_start, level_start + offset);
-
-            level_start = level_starts[value_cnt];
-            levels_offset = level_start + offset;
-            value_cnt++;
-
-            result->push_back(levels_mem[levels_offset - daa_offset] + result->back());
-        }
-    }
-
-    return result;
-}
-
-uint IndexRetriever::AccessToDAA(DAA& daa, ulong offset) {
-    if (to_daa_compressed_) {
-        uint data_width = (offset % 2) ? daa.daa_offset_width : daa.chara_set_id_width;
-
-        ulong bit_start = ulong(offset / 2) * ulong(daa.chara_set_id_width + daa.daa_offset_width) +
-                          ((offset % 2) ? daa.chara_set_id_width : 0);
-
-        return AccessBitSequence(daa.to_daa, data_width, bit_start);
-    } else {
-        return daa.to_daa[offset];
-    }
-}
-
-uint IndexRetriever::AccessLevels(DAA& daa, ulong offset) {
-    MMap<uint>& levels = daa.daa_levels;
-    if (levels_compressed_) {
-        uint data_width = daa.daa_levels_width;
-        ulong bit_start = offset * ulong(data_width);
-        return AccessBitSequence(levels, data_width, bit_start);
-    } else {
-        return levels[offset];
-    }
-}
-
-std::shared_ptr<std::vector<uint>> IndexRetriever::AccessDAA(DAA& daa,
-                                                             uint offset,
-                                                             uint daa_offset,
-                                                             uint daa_size) {
-    uint value;
-    uint value_offset;
-    MMap<char>& level_end = daa.daa_level_end;
-    MMap<char>& array_end = daa.daa_array_end;
-
-    value_offset = daa_offset + offset;
-    value = AccessLevels(daa, value_offset);
-
-    if (daa_size == 1)
-        return std::make_shared<std::vector<uint>>(std::vector<uint>{value});
-
-    std::shared_ptr<std::vector<uint>> array = std::make_shared<std::vector<uint>>();
-    array->push_back(value);
-
-    One one = One(level_end, daa_offset, daa_offset + daa_size);
-
-    uint level_start = daa_offset;
-    while (!get_bit(array_end, value_offset)) {
-        offset = offset - range_rank(array_end, level_start, level_start + offset);
-
-        level_start = one.Next() + 1;
-        value_offset = level_start + offset;
-
-        value = AccessLevels(daa, value_offset) + array->back();
-        array->push_back(value);
-    }
-
-    return array;
 }
 
 void IndexRetriever::Close() {
@@ -367,19 +108,9 @@ uint IndexRetriever::Term2ID(const SPARQLParser::Term& term) {
     return dict_.String2ID(term.value, term.position);
 }
 
-std::pair<uint, uint> IndexRetriever::FetchDAABounds(DAA& daa, uint id) {
-    uint daa_offset = 0;
-    uint daa_size = AccessToDAA(daa, (id - 1) * 2 + 1);  // where next daa start
-    if (id != 1) {
-        daa_offset = AccessToDAA(daa, (id - 2) * 2 + 1);
-        daa_size = daa_size - daa_offset;
-    }
-    return {daa_offset, daa_size};
-}
-
 // ?s p ?o
 std::shared_ptr<std::vector<uint>> IndexRetriever::GetSSet(uint pid) {
-    if (ps_sets_[pid - 1]->size() == 0) {
+    if (ps_sets_[pid - 1] == nullptr) {
         if (predicate_index_compressed_) {
             uint s_array_offset = predicate_index_[(pid - 1) * 4];
             uint s_array_size = predicate_index_[(pid - 1) * 4 + 2] - s_array_offset;
@@ -390,6 +121,7 @@ std::shared_ptr<std::vector<uint>> IndexRetriever::GetSSet(uint pid) {
 
             uint total_length = predicate_index_[(pid - 1) * 4 + 1];
             uint* recovdata = new uint[total_length];
+
             streamvbyte_decode(compressed_buffer, recovdata, total_length);
 
             for (uint i = 1; i < total_length; i++)
@@ -407,12 +139,13 @@ std::shared_ptr<std::vector<uint>> IndexRetriever::GetSSet(uint pid) {
             ps_sets_[pid - 1] = std::make_shared<std::vector<uint>>(set, set + s_array_size);
         }
     }
+
     return ps_sets_[pid - 1];
 }
 
 // ?s p ?o
 std::shared_ptr<std::vector<uint>> IndexRetriever::GetOSet(uint pid) {
-    if (po_sets_[pid - 1]->size() == 0) {
+    if (po_sets_[pid - 1] == nullptr) {
         if (predicate_index_compressed_) {
             uint o_array_offset = predicate_index_[(pid - 1) * 4 + 2];
             uint o_array_size;
@@ -454,9 +187,8 @@ std::shared_ptr<std::vector<uint>> IndexRetriever::GetOSet(uint pid) {
 // ?s ?p o, s ?p ?o
 std::shared_ptr<std::vector<uint>> IndexRetriever::GetSPreSet(uint sid) {
     if (0 < sid && sid <= max_subject_id_) {
-        uint c_set_id = AccessToDAA(spo_, (sid - 1) * 2);
-        return std::make_shared<std::vector<uint>>(
-            GetCharacteristicSet(subject_characteristic_set_, c_set_id));
+        uint c_set_id = spo_.CharacteristicSetID(sid);
+        return std::make_shared<std::vector<uint>>(subject_characteristic_set_[c_set_id]);
     }
     return std::make_shared<std::vector<uint>>();
 }
@@ -466,9 +198,8 @@ std::shared_ptr<std::vector<uint>> IndexRetriever::GetOPreSet(uint oid) {
     if ((0 < oid && oid <= dict_.shared_cnt()) || max_subject_id_ < oid) {
         if (oid > dict_.shared_cnt())
             oid -= dict_.subject_cnt();
-        uint c_set_id = AccessToDAA(ops_, (oid - 1) * 2);
-        return std::make_shared<std::vector<uint>>(
-            GetCharacteristicSet(object_characteristic_set_, c_set_id));
+        uint c_set_id = ops_.CharacteristicSetID(oid);
+        return std::make_shared<std::vector<uint>>(object_characteristic_set_[c_set_id]);
     }
     return std::make_shared<std::vector<uint>>();
 }
@@ -476,14 +207,13 @@ std::shared_ptr<std::vector<uint>> IndexRetriever::GetOPreSet(uint oid) {
 // s p ?o
 std::shared_ptr<std::vector<uint>> IndexRetriever::GetBySP(uint sid, uint pid) {
     if (0 < sid && sid <= max_subject_id_) {
-        uint c_set_id = AccessToDAA(spo_, (sid - 1) * 2);
-        const auto& char_set = GetCharacteristicSet(subject_characteristic_set_, c_set_id);
+        uint c_set_id = spo_.CharacteristicSetID(sid);
+        const auto& char_set = subject_characteristic_set_[c_set_id];
         auto it = std::lower_bound(char_set.begin(), char_set.end(), pid);
 
         if (it != char_set.end() && *it == pid) {
             uint index = std::distance(char_set.begin(), it);
-            auto [daa_offset, daa_size] = FetchDAABounds(spo_, sid);
-            return AccessDAA(spo_, index, daa_offset, daa_size);
+            return spo_.AccessDAA(sid, index);
         }
     }
     return nullptr;
@@ -494,14 +224,13 @@ std::shared_ptr<std::vector<uint>> IndexRetriever::GetByOP(uint oid, uint pid) {
     if ((0 < oid && oid <= dict_.shared_cnt()) || max_subject_id_ < oid) {
         if (oid > dict_.shared_cnt())
             oid -= dict_.subject_cnt();
-        uint c_set_id = AccessToDAA(ops_, (oid - 1) * 2);
-        const auto& char_set = GetCharacteristicSet(object_characteristic_set_, c_set_id);
+        uint c_set_id = ops_.CharacteristicSetID(oid);
+        const auto& char_set = object_characteristic_set_[c_set_id];
         auto it = std::lower_bound(char_set.begin(), char_set.end(), pid);
 
         if (it != char_set.end() && *it == pid) {
             uint index = std::distance(char_set.begin(), it);
-            auto [daa_offset, daa_size] = FetchDAABounds(ops_, oid);
-            return AccessDAA(ops_, index, daa_offset, daa_size);
+            return ops_.AccessDAA(oid, index);
         }
     }
     return nullptr;
@@ -512,14 +241,13 @@ std::shared_ptr<std::vector<uint>> IndexRetriever::GetBySO(uint sid, uint oid) {
     std::shared_ptr<std::vector<uint>> result = std::make_shared<std::vector<uint>>();
 
     if ((0 < sid && sid <= max_subject_id_) && (oid <= dict_.shared_cnt() || max_subject_id_ < oid)) {
-        uint ops_daa_offset = (oid - 1) * 2;
         if (oid > dict_.shared_cnt())
-            ops_daa_offset = (oid - dict_.subject_cnt() - 1) * 2;
+            oid = dict_.subject_cnt();
 
-        uint s_c_set_id = AccessToDAA(spo_, (sid - 1) * 2);
-        uint o_c_set_id = AccessToDAA(ops_, ops_daa_offset);
-        std::vector<uint>& s_c_set = GetCharacteristicSet(subject_characteristic_set_, s_c_set_id);
-        std::vector<uint>& o_c_set = GetCharacteristicSet(object_characteristic_set_, o_c_set_id);
+        uint s_c_set_id = spo_.CharacteristicSetID(sid);
+        uint o_c_set_id = ops_.CharacteristicSetID(oid);
+        std::vector<uint>& s_c_set = subject_characteristic_set_[s_c_set_id];
+        std::vector<uint>& o_c_set = object_characteristic_set_[o_c_set_id];
 
         for (uint i = 0; i < s_c_set.size(); i++) {
             for (uint j = 0; j < o_c_set.size(); j++) {
@@ -540,8 +268,7 @@ std::shared_ptr<std::vector<uint>> IndexRetriever::GetByS(uint sid) {
     std::shared_ptr<std::vector<uint>> result = std::make_shared<std::vector<uint>>();
 
     if (0 < sid && sid <= max_subject_id_) {
-        auto [daa_offset, daa_size] = FetchDAABounds(spo_, sid);
-        result = AccessAllArrays(spo_, daa_offset, daa_size);
+        result = spo_.AccessDAAAllArrays(sid);
         std::sort(result->begin(), result->end());
         result->erase(std::unique(result->begin(), result->end()), result->end());
         return result;
@@ -556,8 +283,7 @@ std::shared_ptr<std::vector<uint>> IndexRetriever::GetByO(uint oid) {
         if (oid > dict_.shared_cnt())
             oid -= dict_.subject_cnt();
 
-        auto [daa_offset, daa_size] = FetchDAABounds(ops_, oid);
-        result = AccessAllArrays(ops_, daa_offset, daa_size);
+        result = ops_.AccessDAAAllArrays(oid);
         std::sort(result->begin(), result->end());
         result->erase(std::unique(result->begin(), result->end()), result->end());
     }
@@ -565,7 +291,7 @@ std::shared_ptr<std::vector<uint>> IndexRetriever::GetByO(uint oid) {
 }
 
 uint IndexRetriever::GetSSetSize(uint pid) {
-    if (ps_sets_[pid - 1]->size() == 0) {
+    if (ps_sets_[pid - 1] == nullptr) {
         uint s_array_size;
         if (predicate_index_compressed_) {
             s_array_size = predicate_index_[(pid - 1) * 4 + 1];
@@ -580,7 +306,7 @@ uint IndexRetriever::GetSSetSize(uint pid) {
 }
 
 uint IndexRetriever::GetOSetSize(uint pid) {
-    if (po_sets_[pid - 1]->size() == 0) {
+    if (po_sets_[pid - 1] == nullptr) {
         uint o_array_size;
         if (predicate_index_compressed_) {
             o_array_size = predicate_index_[(pid - 1) * 4 + 3];
@@ -597,18 +323,14 @@ uint IndexRetriever::GetOSetSize(uint pid) {
 }
 
 uint IndexRetriever::GetBySSize(uint sid) {
-    if (sid <= max_subject_id_) {
-        auto [daa_offset, daa_size] = FetchDAABounds(spo_, sid);
-        return daa_size;
-    }
+    if (sid <= max_subject_id_)
+        return spo_.DAASize(sid);
     return 0;
 }
 
 uint IndexRetriever::GetByOSize(uint oid) {
-    if ((0 < oid && oid <= dict_.shared_cnt()) || max_subject_id_ < oid) {
-        auto [daa_offset, daa_size] = FetchDAABounds(ops_, oid);
-        return daa_size;
-    }
+    if ((0 < oid && oid <= dict_.shared_cnt()) || max_subject_id_ < oid)
+        return ops_.DAASize(oid);
     return 0;
 }
 

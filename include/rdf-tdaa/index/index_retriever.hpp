@@ -4,64 +4,27 @@
 #include <limits.h>
 #include <fstream>
 #include <iostream>
+#include <span>
 #include <thread>
 #include <vector>
 #include "rdf-tdaa/dictionary/dictionary.hpp"
+#include "rdf-tdaa/index/characteristic_set.hpp"
+#include "rdf-tdaa/index/daas.hpp"
 #include "rdf-tdaa/utils/join_list.hpp"
 #include "rdf-tdaa/utils/mmap.hpp"
 #include "streamvbyte.h"
 
-#define get_bit(bits, offset) ((((bits)[(offset) / 8] >> (7 - (offset) % 8)) & 1))
-
-class One {
-    MMap<char>& bits_;
-
-    uint bit_offset_;
-    uint end_;
-
-   public:
-    One(MMap<char>& bits, uint begin, uint end);
-
-    // next one in [begin, end)
-    uint Next();
-};
-
-// ones in [begin, end)
-uint range_rank(MMap<char>& bits, uint begin, uint end);
-
 class IndexRetriever {
-    struct DAA {
-        uint chara_set_id_width;
-        uint daa_offset_width;
-        uint daa_levels_width;
-        MMap<uint> to_daa;
-        MMap<uint> daa_levels;
-        MMap<char> daa_level_end;
-        MMap<char> daa_array_end;
-    };
-
-    struct CharacteristicSet {
-        uint count;
-        MMap<uint8_t> mmap;
-        std::vector<std::pair<uint, uint>> offset_size;
-        std::vector<std::vector<uint>> sets;
-
-        CharacteristicSet();
-        CharacteristicSet(uint cnt);
-    };
-
     std::string db_name_;
     std::string db_dictionary_path_;
     std::string db_index_path_;
 
     bool predicate_index_compressed_ = true;
-    bool to_daa_compressed_ = true;
-    bool levels_compressed_ = true;
 
     Dictionary dict_;
 
-    DAA spo_;
-    DAA ops_;
+    DAAs spo_;
+    DAAs ops_;
 
     MMap<uint> predicate_index_;
     MMap<uint> predicate_index_arrays_no_compress_;
@@ -78,18 +41,6 @@ class IndexRetriever {
 
     void InitMMap();
 
-    std::vector<uint>& GetCharacteristicSet(CharacteristicSet& c_set, uint c_id);
-
-    uint AccessBitSequence(MMap<uint>& bits, uint data_width, ulong bit_start);
-
-    std::shared_ptr<std::vector<uint>> AccessAllArrays(DAA& daa, uint daa_start, uint daa_size);
-
-    uint AccessToDAA(DAA& daa, ulong offset);
-
-    uint AccessLevels(DAA& daa, ulong offset);
-
-    std::shared_ptr<std::vector<uint>> AccessDAA(DAA& daa, uint offset, uint daa_start, uint daa_size);
-
    public:
     IndexRetriever();
 
@@ -100,8 +51,6 @@ class IndexRetriever {
     const char* ID2String(uint id, SPARQLParser::Term::Positon pos);
 
     uint Term2ID(const SPARQLParser::Term& term);
-
-    std::pair<uint, uint> FetchDAABounds(DAA& daa, uint id);
 
     std::shared_ptr<std::vector<uint>> GetSSet(uint pid);
 
