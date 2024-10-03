@@ -23,7 +23,7 @@ class PlanGenerator {
 
         RType retrieval_type;
         PType prestore_type;
-        std::shared_ptr<std::vector<uint>> index_result;
+        std::span<uint> index_result;
 
         uint triple_pattern_id;
         uint search_id;
@@ -56,7 +56,7 @@ class PlanGenerator {
     std::vector<std::vector<Item>> query_plan_;
     std::vector<std::vector<uint>> filled_item_indices_;
     std::vector<std::vector<uint>> empty_item_indices_;
-    std::vector<std::vector<std::shared_ptr<std::vector<uint>>>> pre_results_;
+    std::vector<std::vector<std::span<uint>>> pre_results_;
     bool zero_result_ = false;
 
    public:
@@ -83,7 +83,7 @@ class PlanGenerator {
     hash_map<std::string, Variable*>& value2variable();
     std::vector<std::vector<uint>>& filled_item_indices();
     std::vector<std::vector<uint>>& empty_item_indices();
-    std::vector<std::vector<std::shared_ptr<std::vector<uint>>>>& pre_results();
+    std::vector<std::vector<std::span<uint>>>& pre_results();
     bool zero_result();
 };
 

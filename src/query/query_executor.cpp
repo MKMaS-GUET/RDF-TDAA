@@ -8,7 +8,7 @@ QueryExecutor::Stat::Stat(const std::vector<std::vector<PlanGenerator::Item>>& p
     current_tuple.resize(n);
 
     for (long unsigned int i = 0; i < n; i++) {
-        candidate_value[i] = std::make_shared<std::vector<uint>>();
+        candidate_value[i] = std::span<uint>();
     }
 }
 
@@ -46,27 +46,26 @@ QueryExecutor::QueryExecutor(std::shared_ptr<IndexRetriever> index,
       limit_(limit),
       shared_cnt_(shared_cnt) {}
 
-std::shared_ptr<std::vector<uint>> QueryExecutor::LeapfrogJoin(
-    std::vector<std::shared_ptr<std::vector<uint>>>& lists) {
+std::span<uint> QueryExecutor::LeapfrogJoin(std::vector<std::span<uint>>& lists) {
     JoinList join_list;
     join_list.AddVectors(lists);
 
     return LeapfrogJoin(join_list);
 }
 
-std::shared_ptr<std::vector<uint>> QueryExecutor::LeapfrogJoin(JoinList& lists) {
-    std::shared_ptr<std::vector<uint>> result_set = std::make_shared<std::vector<uint>>();
+std::span<uint> QueryExecutor::LeapfrogJoin(JoinList& lists) {
+    std::vector<uint>* result_set = new std::vector<uint>();
 
     if (lists.Size() == 1) {
-        std::shared_ptr<std::vector<uint>> result = std::make_shared<std::vector<uint>>();
-        for (uint i = 0; i < lists.GetRangeByIndex(0)->size(); i++)
-            result->push_back(lists.GetRangeByIndex(0)->operator[](i));
-        return result;
+        std::vector<uint>* result = new std::vector<uint>;
+        for (uint i = 0; i < lists.GetRangeByIndex(0).size(); i++)
+            result->push_back(lists.GetRangeByIndex(0)[i]);
+        return std::span<uint>(result->begin(), result->size());
     }
 
     // Check if any index is empty => Intersection empty
     if (lists.HasEmpty())
-        return result_set;
+        return std::span<uint>();
 
     lists.UpdateCurrentPostion();
     // 创建指向每一个列表的指针，初始指向列表的第一个值
@@ -110,13 +109,13 @@ std::shared_ptr<std::vector<uint>> QueryExecutor::LeapfrogJoin(JoinList& lists) 
         idx = idx % lists.Size();
     }
 
-    return result_set;
+    return std::span<uint>(result_set->begin(), result_set->size());
 }
 
 bool QueryExecutor::PreJoin() {
     JoinList join_list;
     std::stringstream key;
-    pre_join_ = std::vector<std::shared_ptr<std::vector<uint>>>(stat_.plan.size());
+    pre_join_ = std::vector<std::span<uint>>(stat_.plan.size());
     for (long unsigned int level = 0; level < stat_.plan.size(); level++) {
         if (!empty_item_indices_[level].empty())
             continue;
@@ -129,7 +128,7 @@ bool QueryExecutor::PreJoin() {
         }
         if (join_list.Size() > 1) {
             pre_join_[level] = LeapfrogJoin(join_list);
-            if (pre_join_[level]->size() == 0)
+            if (pre_join_[level].size() == 0)
                 return false;
         }
         join_list.Clear();
@@ -141,7 +140,7 @@ void QueryExecutor::Down(Stat& stat) {
     ++stat.level;
 
     // 如果当前层没有查询结果，就生成结果
-    if (stat.candidate_value[stat.level]->empty()) {
+    if (stat.candidate_value[stat.level].empty()) {
         GenCondidateValue(stat);
         if (stat.at_end)
             return;
@@ -157,7 +156,7 @@ void QueryExecutor::Down(Stat& stat) {
 
 void QueryExecutor::Up(Stat& stat) {
     // 清除较高 level_ 的查询结果
-    stat.candidate_value[stat.level]->clear();
+    stat.candidate_value[stat.level] = std::span<uint>();
     stat.candidate_indices[stat.level] = 0;
 
     --stat.level;
@@ -186,10 +185,8 @@ void QueryExecutor::GenCondidateValue(Stat& stat) {
 
     if ((!has_unariate_result && !has_empty_item_ && has_filled_item) ||
         (has_unariate_result && !has_empty_item_ && has_filled_item)) {
-        if (pre_join_[stat_.level] != nullptr) {
-            stat.candidate_value[stat.level]->reserve(pre_join_[stat_.level]->size());
-            for (auto iter = pre_join_[stat_.level]->begin(); iter != pre_join_[stat_.level]->end(); iter++)
-                stat.candidate_value[stat.level]->emplace_back(std::move(*iter));
+        if (pre_join_[stat_.level].size()) {
+            stat.candidate_value[stat.level] = pre_join_[stat_.level];
             return;
         } else {
             for (const auto& idx : filled_item_indices_[stat.level])
@@ -201,11 +198,7 @@ void QueryExecutor::GenCondidateValue(Stat& stat) {
     if ((!has_unariate_result && has_empty_item_ && has_filled_item) ||
         (has_unariate_result && !has_empty_item_ && !has_filled_item && join_list.Size() == 1) ||
         (!has_unariate_result && has_empty_item_ && !has_filled_item && join_list.Size() == 1)) {
-        std::shared_ptr<std::vector<uint>> range = join_list.GetRangeByIndex(0);
-        stat.candidate_value[stat.level] = std::make_shared<std::vector<uint>>();
-        for (uint i = 0; i < range->size(); i++) {
-            stat.candidate_value[stat.level]->push_back(range->operator[](i));
-        }
+        stat.candidate_value[stat.level] = join_list.GetRangeByIndex(0);
     }
 
     if ((has_unariate_result && has_empty_item_ && !has_filled_item) ||
@@ -216,7 +209,7 @@ void QueryExecutor::GenCondidateValue(Stat& stat) {
     }
 
     // 变量的交集为空
-    if (stat.candidate_value[stat.level]->empty()) {
+    if (stat.candidate_value[stat.level].empty()) {
         stat.at_end = true;
         return;
     }
@@ -226,10 +219,10 @@ bool QueryExecutor::UpdateCurrentTuple(Stat& stat) {
     // stat.indices_ 用于更新已经处理过的交集结果在结果列表中的 id
     size_t idx = stat.candidate_indices[stat.level];
 
-    if (idx < stat.candidate_value[stat.level]->size()) {
+    if (idx < stat.candidate_value[stat.level].size()) {
         // candidate_value_ 是每一个 level_ 交集的计算结果，
         // entity 是第 idx 个结果
-        uint value = stat.candidate_value[stat.level]->at(idx);
+        uint value = stat.candidate_value[stat.level][idx];
 
         // 如果当前层没有 filled_item，就说明不需要填充 filled_item 对应的 empty_item
         // 否则就要调用 FillEmptyItem 进行填充
@@ -259,8 +252,8 @@ bool QueryExecutor::FillEmptyItem(Stat& stat, uint value) {
                 continue;
 
             uint id = item.search_id;
-            std::shared_ptr<std::vector<uint>> r;
-
+            std::span<uint> r;
+            
             if (item.retrieval_type == Rtype::kSO) {
                 if (item.prestore_type == Ptype::kObject)
                     empty_item.index_result = index_->GetBySO(id, value);
@@ -273,10 +266,7 @@ bool QueryExecutor::FillEmptyItem(Stat& stat, uint value) {
                     r = index_->GetBySP(id, value);
                 else if (item.prestore_type == Ptype::kPreSub)
                     r = index_->GetBySP(value, id);
-                if (r)
-                    empty_item.index_result = r;
-                else
-                    empty_item.index_result->clear();
+                empty_item.index_result = r;
             }
 
             if (item.retrieval_type == Rtype::kOP) {
@@ -284,13 +274,10 @@ bool QueryExecutor::FillEmptyItem(Stat& stat, uint value) {
                     r = index_->GetByOP(value, id);
                 else if (item.prestore_type == Ptype::kPredicate)
                     r = index_->GetByOP(id, value);
-                if (r)
-                    empty_item.index_result = r;
-                else
-                    empty_item.index_result->clear();
+                empty_item.index_result = r;
             }
 
-            if (empty_item.index_result->size() == 0)
+            if (empty_item.index_result.size() == 0)
                 match = false;
             break;
         }

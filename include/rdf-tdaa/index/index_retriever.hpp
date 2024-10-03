@@ -29,8 +29,8 @@ class IndexRetriever {
     MMap<uint> predicate_index_;
     MMap<uint> predicate_index_arrays_no_compress_;
     MMap<uint8_t> predicate_index_arrays_;
-    std::vector<std::shared_ptr<std::vector<uint>>> ps_sets_;
-    std::vector<std::shared_ptr<std::vector<uint>>> po_sets_;
+    std::vector<std::span<uint>> ps_sets_;
+    std::vector<std::span<uint>> po_sets_;
 
     CharacteristicSet subject_characteristic_set_;
     CharacteristicSet object_characteristic_set_;
@@ -52,23 +52,23 @@ class IndexRetriever {
 
     uint Term2ID(const SPARQLParser::Term& term);
 
-    std::shared_ptr<std::vector<uint>> GetSSet(uint pid);
+    std::span<uint> GetSSet(uint pid);
 
-    std::shared_ptr<std::vector<uint>> GetOSet(uint pid);
+    std::span<uint> GetOSet(uint pid);
 
-    std::shared_ptr<std::vector<uint>> GetSPreSet(uint sid);
+    std::span<uint> GetSPreSet(uint sid);
 
-    std::shared_ptr<std::vector<uint>> GetOPreSet(uint oid);
+    std::span<uint> GetOPreSet(uint oid);
 
-    std::shared_ptr<std::vector<uint>> GetByS(uint sid);
+    std::span<uint> GetByS(uint sid);
 
-    std::shared_ptr<std::vector<uint>> GetByO(uint oid);
+    std::span<uint> GetByO(uint oid);
 
-    std::shared_ptr<std::vector<uint>> GetBySP(uint sid, uint pid);
+    std::span<uint> GetBySP(uint sid, uint pid);
 
-    std::shared_ptr<std::vector<uint>> GetByOP(uint oid, uint pid);
+    std::span<uint> GetByOP(uint oid, uint pid);
 
-    std::shared_ptr<std::vector<uint>> GetBySO(uint sid, uint oid);
+    std::span<uint> GetBySO(uint sid, uint oid);
 
     uint GetSSetSize(uint pid);
 

@@ -76,7 +76,7 @@ std::pair<uint, uint> DAAs::DAAOffsetSize(uint id) {
     return {daa_offset, daa_size};
 }
 
-std::shared_ptr<std::vector<uint>> DAAs::AccessDAAAllArrays(uint id) {
+std::span<uint> DAAs::AccessDAAAllArrays(uint id) {
     auto [daa_offset, daa_size] = DAAOffsetSize(id);
 
     ulong bit_start = daa_offset * ulong(daa_levels_width);
@@ -95,7 +95,7 @@ std::shared_ptr<std::vector<uint>> DAAs::AccessDAAAllArrays(uint id) {
         uint shift_to_end = 32 - (offset_in_uint + bits_to_write);
         uint mask = ((1ull << bits_to_write) - 1) << shift_to_end;
 
-        uint extracted_bits = (levels_mem[uint_offset] & mask) >> shift_to_end;
+        uint extracted_bits = (daa_levels[uint_offset] & mask) >> shift_to_end;
         data |= extracted_bits << (remaining_bits - bits_to_write);
 
         remaining_bits -= bits_to_write;
@@ -112,13 +112,11 @@ std::shared_ptr<std::vector<uint>> DAAs::AccessDAAAllArrays(uint id) {
             offset_in_uint = 0;
     }
 
-    std::shared_ptr<std::vector<std::vector<uint>>> arrays;
-
-    std::shared_ptr<std::vector<uint>> result = std::make_shared<std::vector<uint>>();
+    std::vector<uint>* result = new std::vector<uint>();
 
     if (daa_size == 1) {
         result->push_back(levels_mem[0]);
-        return result;
+        return std::span<uint>(*result);
     }
 
     std::vector<uint> level_starts;
@@ -148,7 +146,7 @@ std::shared_ptr<std::vector<uint>> DAAs::AccessDAAAllArrays(uint id) {
         }
     }
 
-    return result;
+    return std::span<uint>(*result);
 }
 
 uint DAAs::AccessToDAA(ulong offset) {
@@ -173,7 +171,7 @@ uint DAAs::AccessLevels(ulong offset) {
     }
 }
 
-std::shared_ptr<std::vector<uint>> DAAs::AccessDAA(uint id, uint index) {
+std::span<uint> DAAs::AccessDAA(uint id, uint index) {
     auto [daa_offset, daa_size] = DAAOffsetSize(id);
 
     uint value;
@@ -182,11 +180,11 @@ std::shared_ptr<std::vector<uint>> DAAs::AccessDAA(uint id, uint index) {
     value_offset = daa_offset + index;
     value = AccessLevels(value_offset);
 
-    std::shared_ptr<std::vector<uint>> result = std::make_shared<std::vector<uint>>();
+    std::vector<uint>* result = new std::vector<uint>;
     result->push_back(value);
 
     if (daa_size == 1)
-        return result;
+        return std::span<uint>(*result);
 
     One one = One(daa_level_end, daa_offset, daa_offset + daa_size);
 
@@ -201,5 +199,5 @@ std::shared_ptr<std::vector<uint>> DAAs::AccessDAA(uint id, uint index) {
         result->push_back(value);
     }
 
-    return result;
+    return std::span<uint>(*result);
 }

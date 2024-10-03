@@ -3,6 +3,7 @@
 
 #include <memory>
 #include <vector>
+#include <span>
 #include "rdf-tdaa/utils/mmap.hpp"
 
 #define get_bit(bits, offset) ((((bits)[(offset) / 8] >> (7 - (offset) % 8)) & 1))
@@ -48,9 +49,9 @@ class DAAs {
 
     uint AccessLevels(ulong offset);
 
-    std::shared_ptr<std::vector<uint>> AccessDAA(uint id, uint offset);
+    std::span<uint> AccessDAA(uint id, uint offset);
 
-    std::shared_ptr<std::vector<uint>> AccessDAAAllArrays(uint id);
+    std::span<uint> AccessDAAAllArrays(uint id);
 };
 
 #endif

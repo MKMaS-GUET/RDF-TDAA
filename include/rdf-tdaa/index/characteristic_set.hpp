@@ -3,17 +3,18 @@
 
 #include <vector>
 #include "rdf-tdaa/utils/mmap.hpp"
+#include <span>
 
 struct CharacteristicSet {
     uint count;
     MMap<uint8_t> mmap;
     std::vector<std::pair<uint, uint>> offset_size;
-    std::vector<std::vector<uint>> sets;
+    std::vector<std::span<uint>> sets;
 
     CharacteristicSet();
     CharacteristicSet(uint cnt);
 
-    std::vector<uint>& operator[](uint c_id);
+    std::span<uint>& operator[](uint c_id);
 };
 
 #endif

@@ -16,7 +16,7 @@ class QueryExecutor {
         int level;
         // 用于记录每一个 level_ 的 candidate_result_ 已经处理过的结果的 id
         std::vector<uint> current_tuple;
-        std::vector<std::shared_ptr<std::vector<uint>>> candidate_value;
+        std::vector<std::span<uint>> candidate_value;
         std::vector<uint> candidate_indices;
         std::vector<std::vector<uint>> result;
         std::vector<std::vector<PlanGenerator::Item>> plan;
@@ -32,13 +32,13 @@ class QueryExecutor {
     std::shared_ptr<IndexRetriever> index_;
     std::vector<std::vector<uint>>& filled_item_indices_;
     std::vector<std::vector<uint>>& empty_item_indices_;
-    std::vector<std::vector<std::shared_ptr<std::vector<uint>>>>& pre_results_;
-    std::vector<std::shared_ptr<std::vector<uint>>> pre_join_;
+    std::vector<std::vector<std::span<uint>>>& pre_results_;
+    std::vector<std::span<uint>> pre_join_;
     uint limit_;
     uint shared_cnt_;
     std::chrono::duration<double, std::milli> query_duration_;
 
-    std::shared_ptr<std::vector<uint>> static LeapfrogJoin(JoinList& lists);
+    std::span<uint> static LeapfrogJoin(JoinList& lists);
 
     bool PreJoin();
 
@@ -55,8 +55,7 @@ class QueryExecutor {
     bool FillEmptyItem(Stat& stat, uint entity);
 
    public:
-    std::shared_ptr<std::vector<uint>> static LeapfrogJoin(
-        std::vector<std::shared_ptr<std::vector<uint>>>& lists);
+    std::span<uint> static LeapfrogJoin(std::vector<std::span<uint>>& lists);
 
     QueryExecutor(std::shared_ptr<IndexRetriever> index,
                   std::shared_ptr<PlanGenerator>& plan,

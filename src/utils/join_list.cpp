@@ -1,24 +1,24 @@
 #include "rdf-tdaa/utils/join_list.hpp"
 
 JoinList::JoinList() {
-    lists_ = std::vector<std::shared_ptr<std::vector<uint>>>();
+    lists_ = std::vector<std::span<uint>>();
 }
 
-JoinList::JoinList(std::vector<std::shared_ptr<std::vector<uint>>>& lists) {
+JoinList::JoinList(std::vector<std::span<uint>>& lists) {
     AddVectors(lists);
 }
 
-void JoinList::AddVector(std::shared_ptr<std::vector<uint>>& list) {
-    if (list->size() == 0)
+void JoinList::AddVector(std::span<uint>& list) {
+    if (list.size() == 0)
         return;
     if (lists_.size() == 0) {
         lists_.push_back(list);
         return;
     }
 
-    uint first_val = list->operator[](0);
+    uint first_val = list.operator[](0);
     for (long unsigned int i = 0; i < lists_.size(); i++) {
-        if (lists_[i]->operator[](0) > first_val) {
+        if (lists_[i][0] > first_val) {
             lists_.insert(lists_.begin() + i, list);
             return;
         }
@@ -27,18 +27,18 @@ void JoinList::AddVector(std::shared_ptr<std::vector<uint>>& list) {
     lists_.push_back(list);
 }
 
-void JoinList::AddVectors(std::vector<std::shared_ptr<std::vector<uint>>>& lists) {
+void JoinList::AddVectors(std::vector<std::span<uint>>& lists) {
     for (auto it = lists.begin(); it != lists.end(); it++) {
         AddVector(*it);
     }
 }
 
-std::shared_ptr<std::vector<uint>> JoinList::Shortest() {
+std::span<uint> JoinList::Shortest() {
     long unsigned int min_i = 0;
-    long unsigned int min = lists_[0]->size();
+    long unsigned int min = lists_[0].size();
     for (long unsigned int i = 0; i < lists_.size(); i++) {
-        if (lists_[i]->size() < min) {
-            min = lists_[i]->size();
+        if (lists_[i].size() < min) {
+            min = lists_[i].size();
             min_i = i;
         }
     }
@@ -47,15 +47,15 @@ std::shared_ptr<std::vector<uint>> JoinList::Shortest() {
 
 void JoinList::UpdateCurrentPostion() {
     for (long unsigned int i = 0; i < lists_.size(); i++) {
-        vector_current_pos_.push_back(lists_[i]->begin());
+        vector_current_pos_.push_back(lists_[i].begin());
     }
 }
 
 void JoinList::Seek(int i, uint val) {
-    std::shared_ptr<std::vector<uint>> p_r = lists_[i];
+    std::span<uint>& p_r = lists_[i];
 
     auto it = vector_current_pos_[i];
-    auto end = p_r->end();
+    auto end = p_r.end();
     for (; it < end; it = it + 2) {
         if (*it >= val) {
             if (*(it - 1) >= val) {
@@ -83,13 +83,13 @@ void JoinList::NextVal(int i) {
     vector_current_pos_[i]++;
 }
 
-std::shared_ptr<std::vector<uint>> JoinList::GetRangeByIndex(int i) {
+std::span<uint> JoinList::GetRangeByIndex(int i) {
     return lists_[i];
 }
 
 bool JoinList::HasEmpty() {
     for (long unsigned int i = 0; i < lists_.size(); i++) {
-        if (lists_[i]->size() == 0) {
+        if (lists_[i].size() == 0) {
             return true;
         }
     }
@@ -97,8 +97,8 @@ bool JoinList::HasEmpty() {
 }
 
 bool JoinList::AtEnd(int i) {
-    std::shared_ptr<std::vector<uint>> p_r = lists_[i];
-    return vector_current_pos_[i] == p_r->end();
+    std::span<uint> p_r = lists_[i];
+    return vector_current_pos_[i] == p_r.end();
 }
 
 void JoinList::Clear() {

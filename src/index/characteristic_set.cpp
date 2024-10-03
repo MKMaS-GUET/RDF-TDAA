@@ -5,10 +5,10 @@ CharacteristicSet::CharacteristicSet() {}
 
 CharacteristicSet::CharacteristicSet(uint cnt) : count(cnt) {
     offset_size = std::vector<std::pair<uint, uint>>(cnt);
-    sets = std::vector<std::vector<uint>>(cnt);
+    sets = std::vector<std::span<uint>>(cnt);
 }
 
-std::vector<uint>& CharacteristicSet::operator[](uint c_id) {
+std::span<uint>& CharacteristicSet::operator[](uint c_id) {
     c_id -= 1;
     if (sets[c_id].size() == 0) {
         uint offset = (c_id == 0) ? 0 : offset_size[c_id - 1].first;
@@ -23,7 +23,7 @@ std::vector<uint>& CharacteristicSet::operator[](uint c_id) {
         uint32_t* original_data = Decompress(compressed_buffer, original_size);
         for (uint i = 1; i < original_size; i++)
             original_data[i] += original_data[i - 1];
-        sets[c_id] = std::vector<uint32_t>(original_data, original_data + original_size);
+        sets[c_id] = std::span<uint>(original_data, original_size);
     }
     return sets[c_id];
 }

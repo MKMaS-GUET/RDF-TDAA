@@ -3,26 +3,27 @@
 
 #include <iterator>
 #include <memory>
+#include <span>
 #include <string>
 #include <vector>
 
 class JoinList {
    public:
    private:
-    std::vector<std::shared_ptr<std::vector<uint>>> lists_;
+    std::vector<std::span<uint>> lists_;
 
-    std::vector<std::vector<uint>::iterator> vector_current_pos_;
+    std::vector<std::span<uint>::iterator> vector_current_pos_;
 
    public:
     JoinList();
 
-    JoinList(std::vector<std::shared_ptr<std::vector<uint>>>& lists);
+    JoinList(std::vector<std::span<uint>>& lists);
 
-    void AddVector(std::shared_ptr<std::vector<uint>>& list);
+    void AddVector(std::span<uint>& list);
 
-    void AddVectors(std::vector<std::shared_ptr<std::vector<uint>>>& lists);
+    void AddVectors(std::vector<std::span<uint>>& lists);
 
-    std::shared_ptr<std::vector<uint>> Shortest();
+    std::span<uint> Shortest();
 
     void UpdateCurrentPostion();
 
@@ -34,7 +35,7 @@ class JoinList {
     // 更新range的起始迭代器
     void NextVal(int i);
 
-    std::shared_ptr<std::vector<uint>> GetRangeByIndex(int i);
+    std::span<uint> GetRangeByIndex(int i);
 
     bool HasEmpty();
 

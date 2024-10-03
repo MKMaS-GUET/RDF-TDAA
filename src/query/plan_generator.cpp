@@ -166,7 +166,7 @@ void PlanGenerator::Generate() {
             vertex1 = p.value;
             vertex2 = o.value;
             edge = index_->Term2ID(s);
-            size1 = index_->GetSPreSet(edge)->size();
+            size1 = index_->GetSPreSet(edge).size();
             size2 = index_->GetBySSize(edge);
         }
         if (s.IsVariable() && p.IsVariable() && !o.IsVariable()) {
@@ -174,7 +174,7 @@ void PlanGenerator::Generate() {
             vertex2 = p.value;
             edge = index_->Term2ID(o);
             size1 = index_->GetByOSize(edge);
-            size2 = index_->GetOPreSet(edge)->size();
+            size2 = index_->GetOPreSet(edge).size();
         }
 
         if (triple_parttern.variale_cnt == 2) {
@@ -348,18 +348,15 @@ void PlanGenerator::GenPlanTable() {
             value2variable_[s.value]->position = Term::Positon::kSubject;
             uint oid = index_->Term2ID(o);
             uint pid = index_->Term2ID(p);
-            std::shared_ptr<std::vector<uint>> r = index_->GetByOP(oid, pid);
-            if (r)
-                pre_results_[s_var_id].push_back(r);
-            else
-                pre_results_[s_var_id].push_back(std::make_shared<std::vector<uint>>());
+            std::span<uint> r = index_->GetByOP(oid, pid);
+            pre_results_[s_var_id].push_back(r);
         }
         if (!s.IsVariable() && p.IsVariable() && !o.IsVariable()) {
             p_var_id = value2variable_[p.value]->priority;
             value2variable_[p.value]->position = Term::Positon::kPredicate;
             uint sid = index_->Term2ID(s);
             uint oid = index_->Term2ID(o);
-            std::shared_ptr<std::vector<uint>> r = index_->GetBySO(sid, oid);
+            std::span<uint> r = index_->GetBySO(sid, oid);
             pre_results_[p_var_id].push_back(r);
         }
         if (!s.IsVariable() && !p.IsVariable() && o.IsVariable()) {
@@ -367,11 +364,8 @@ void PlanGenerator::GenPlanTable() {
             value2variable_[o.value]->position = Term::Positon::kObject;
             uint sid = index_->Term2ID(s);
             uint pid = index_->Term2ID(p);
-            std::shared_ptr<std::vector<uint>> r = index_->GetBySP(sid, pid);
-            if (r)
-                pre_results_[o_var_id].push_back(r);
-            else
-                pre_results_[o_var_id].push_back(std::make_shared<std::vector<uint>>());
+            std::span<uint> r = index_->GetBySP(sid, pid);
+            pre_results_[o_var_id].push_back(r);
         }
 
         if (triple_parttern.variale_cnt == 2) {
@@ -422,7 +416,7 @@ void PlanGenerator::GenPlanTable() {
             empty_item.search_id = filled_item.search_id;
             empty_item.prestore_type = Item::PType::kEmpty;
             empty_item.retrieval_type = Item::RType::kNone;
-            empty_item.index_result = std::make_shared<std::vector<uint>>();
+            empty_item.index_result = std::span<uint>();
             empty_item.triple_pattern_id = triple_pattern_id;
             empty_item.empty_item_level = 0;
 
@@ -460,7 +454,7 @@ std::vector<std::vector<uint>>& PlanGenerator::empty_item_indices() {
     return empty_item_indices_;
 }
 
-std::vector<std::vector<std::shared_ptr<std::vector<uint>>>>& PlanGenerator::pre_results() {
+std::vector<std::vector<std::span<uint>>>& PlanGenerator::pre_results() {
     return pre_results_;
 }
 
