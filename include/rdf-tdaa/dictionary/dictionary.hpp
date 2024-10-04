@@ -30,6 +30,10 @@ class Dictionary {
         Node() : offsets_(0), size_(0) {}
         Node(std::string node_path) : offsets_(0), size_(0) {
             auto [data, size] = LoadAndDecompress(node_path + "/id2offset");
+
+            if (size == 0)
+                return;
+
             size_ = size;
             if (sizeof(T) == 4) {
                 offsets_ = reinterpret_cast<T*>(data);

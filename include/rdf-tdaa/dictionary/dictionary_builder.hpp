@@ -29,7 +29,7 @@ class DictionaryBuilder {
     void ReassignIDAndSave(hash_map<std::string, uint>& map,
                            std::ofstream& dict_out,
                            std::string hashmap_path,
-                           uint menagement_file_offset);
+                           uint management_file_offset);
 
     void SaveDict(uint max_threads);
 

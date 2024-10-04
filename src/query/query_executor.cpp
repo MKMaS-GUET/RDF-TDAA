@@ -253,7 +253,7 @@ bool QueryExecutor::FillEmptyItem(Stat& stat, uint value) {
 
             uint id = item.search_id;
             std::span<uint> r;
-            
+
             if (item.retrieval_type == Rtype::kSO) {
                 if (item.prestore_type == Ptype::kObject)
                     empty_item.index_result = index_->GetBySO(id, value);
@@ -302,9 +302,8 @@ void QueryExecutor::Query() {
             // 补完一个查询结果
             if (stat_.level == int(stat_.plan.size() - 1)) {
                 stat_.result.push_back(stat_.current_tuple);
-                if (stat_.result.size() >= limit_) {
+                if (stat_.result.size() >= limit_)
                     break;
-                }
                 Next(stat_);
             } else {
                 Down(stat_);

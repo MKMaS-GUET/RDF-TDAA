@@ -89,7 +89,7 @@ void DictionaryBuilder::BuildDict() {
 void DictionaryBuilder::ReassignIDAndSave(hash_map<std::string, uint>& map,
                                           std::ofstream& dict_out,
                                           std::string nodes_path,
-                                          uint menagement_file_offset) {
+                                          uint management_file_offset) {
     // hash -> (id, p_str)
     phmap::btree_map<std::size_t, std::pair<uint, const std::string*>> hash2id;
     phmap::flat_hash_map<uint, std::vector<std::string>> conflicts;
@@ -119,10 +119,10 @@ void DictionaryBuilder::ReassignIDAndSave(hash_map<std::string, uint>& map,
     uint id2offset_size;
     if (size < UINT_MAX) {
         id2offset_size = map.size();
-        menagement_data_[menagement_file_offset] = 32;
+        menagement_data_[management_file_offset] = 32;
     } else {
         id2offset_size = map.size() * 2;
-        menagement_data_[menagement_file_offset] = 64;
+        menagement_data_[management_file_offset] = 64;
     }
 
     id2offset = new uint[id2offset_size];
@@ -143,6 +143,8 @@ void DictionaryBuilder::ReassignIDAndSave(hash_map<std::string, uint>& map,
     CompressAndSave(id2offset, id2offset_size, nodes_path + "id2offset");
 
     ulong file_size = (sizeof(std::size_t) + 4) * hash2id.size();
+    if (file_size == 0)
+        file_size = 1;
     MMap<std::size_t> hashes = MMap<std::size_t>(nodes_path + "hash2id", file_size);
     for (auto it = hash2id.begin(); it != hash2id.end(); it++)
         hashes.Write(it->first);

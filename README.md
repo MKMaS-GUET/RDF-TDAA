@@ -1,6 +1,6 @@
 # RDF-TDAA
 
-RDF-TDAA: Efficient **RDF** Indexing with **T**rie Structures Based on **D**irect **A**ccess **A**rrays
+RDF-TDAA: Efficient **RDF** Indexing with **T**rie Structures Based on **D**irectly **A**ddressable **A**rrays
 
 ## How to build
 
@@ -8,7 +8,7 @@ RDF-TDAA: Efficient **RDF** Indexing with **T**rie Structures Based on **D**irec
 
 ```shell
 git clone https://github.com/MKMaS-GUET/EPEI
-git submodule update --init --recursive
+git submodule update --init
 ```
 
 Maybe it's need to update the submodule for this project
