@@ -7,7 +7,7 @@ RDF-TDAA: Efficient **RDF** Indexing with **T**rie Structures Based on **D**irec
 1. Clone this project
 
 ```shell
-git clone https://github.com/MKMaS-GUET/EPEI
+git clone git@github.com:MKMaS-GUET/RDF-TDAA.git
 git submodule update --init
 ```
 
