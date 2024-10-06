@@ -65,8 +65,8 @@ uint QueryResult(std::vector<std::vector<uint>>& result,
         for (const auto& idx : variable_indexes) {
             std::cout << index->ID2String(item[idx.priority], idx.position) << " ";
         }
-        cnt++;
         std::cout << std::endl;
+        cnt++;
     }
 
     return cnt;

@@ -21,13 +21,7 @@ void Endpoint::query(const httplib::Request& req, httplib::Response& res) {
             executor->Query();
         std::vector<std::vector<uint>>& results_id = executor->result();
 
-        std::chrono::duration<double, std::milli> diff;
-        auto exec_finish = std::chrono::high_resolution_clock::now();
-        diff = exec_finish - exec_start;
         std::cout << results_id.size() << " ";
-        std::cout << diff.count() << " ";
-
-        auto result_start = std::chrono::high_resolution_clock::now();
 
         rapidjson::StringBuffer result;
         rapidjson::Writer<rapidjson::StringBuffer> writer(result);
@@ -155,8 +149,9 @@ void Endpoint::query(const httplib::Request& req, httplib::Response& res) {
         // res.set_content(result, "application/sparql-results+json;charset=utf-8");
 
         res.set_content(result.GetString(), "application/sparql-results+json;charset=utf-8");
-        auto result_finish = std::chrono::high_resolution_clock::now();
-        diff = result_finish - result_start;
+
+        auto exec_finish = std::chrono::high_resolution_clock::now();
+        std::chrono::duration<double, std::milli> diff = exec_finish - exec_start;
         std::cout << diff.count() << std::endl;
     }
 }

@@ -2,7 +2,6 @@
 #include "rdf-tdaa/dictionary/dictionary_builder.hpp"
 #include "rdf-tdaa/index/characteristic_set.hpp"
 #include "rdf-tdaa/index/daas.hpp"
-#include "rdf-tdaa/index/predicate_index.hpp"
 #include "rdf-tdaa/utils/bitset.hpp"
 #include "rdf-tdaa/utils/mmap.hpp"
 #include "rdf-tdaa/utils/vbyte.hpp"
@@ -89,7 +88,8 @@ void IndexBuilder::BuildCharacteristicSet(std::vector<uint>& c_set_id,
     c_set.Build(compressed_sets, original_size);
 }
 
-void IndexBuilder::BuildEntitySets(std::vector<uint>& c_set_size,
+void IndexBuilder::BuildEntitySets(PredicateIndex& predicate_index,
+                                   std::vector<uint>& c_set_size,
                                    std::vector<std::vector<std::vector<uint>>>& entity_set,
                                    DAAs::Type type) {
     uint entity_cnt = c_set_size.size();
@@ -106,6 +106,7 @@ void IndexBuilder::BuildEntitySets(std::vector<uint>& c_set_size,
         for (auto it = pso_->at(pid).begin(); it != pso_->at(pid).end(); it++) {
             auto [sid, oid] = *it;
             if (type == DAAs::Type::kSPO) {
+                oid = predicate_index.index_[pid - 1].oid2offset[oid];
                 if (bitset.Get(sid))
                     entity_set[sid - 1][p_offset[sid - 1] - 1].push_back(oid);
                 else {
@@ -114,6 +115,7 @@ void IndexBuilder::BuildEntitySets(std::vector<uint>& c_set_size,
                     p_offset[sid - 1]++;
                 }
             } else {
+                sid = predicate_index.index_[pid - 1].sid2offset[sid];
                 if (oid > dict_.shared_cnt())
                     oid -= dict_.subject_cnt();
                 if (bitset.Get(oid))
@@ -149,13 +151,13 @@ bool IndexBuilder::Build() {
     beg = std::chrono::high_resolution_clock::now();
     PredicateIndex predicate_index = PredicateIndex(pso_, db_index_path_, dict_.predicate_cnt());
     predicate_index.Build();
+    predicate_index.Store();
     end = std::chrono::high_resolution_clock::now();
     diff = end - beg;
     std::cout << "build predicate index takes " << diff.count() << " ms." << std::endl;
 
     beg = std::chrono::high_resolution_clock::now();
 
-    // entity_id -> (predicat_set_id, set_size)
     std::vector<uint> subject_c_set_id;
     std::vector<uint> subject_c_set_size;
     std::vector<uint> object_c_set_id;
@@ -175,7 +177,7 @@ bool IndexBuilder::Build() {
     beg = std::chrono::high_resolution_clock::now();
 
     std::vector<std::vector<std::vector<uint>>> spo_entity_set;
-    BuildEntitySets(subject_c_set_size, spo_entity_set, DAAs::Type::kSPO);
+    BuildEntitySets(predicate_index, subject_c_set_size, spo_entity_set, DAAs::Type::kSPO);
     DAAs daas = DAAs(db_index_path_, DAAs::Type::kSPO);
     daas.Build(subject_c_set_id, spo_entity_set);
     std::vector<std::vector<std::vector<uint>>>().swap(spo_entity_set);
@@ -187,7 +189,7 @@ bool IndexBuilder::Build() {
     beg = std::chrono::high_resolution_clock::now();
 
     std::vector<std::vector<std::vector<uint>>> ops_entity_set;
-    BuildEntitySets(object_c_set_size, ops_entity_set, DAAs::Type::kOPS);
+    BuildEntitySets(predicate_index, object_c_set_size, ops_entity_set, DAAs::Type::kOPS);
     daas = DAAs(db_index_path_, DAAs::Type::kOPS);
     daas.Build(object_c_set_id, ops_entity_set);
     std::vector<std::vector<std::vector<uint>>>().swap(ops_entity_set);

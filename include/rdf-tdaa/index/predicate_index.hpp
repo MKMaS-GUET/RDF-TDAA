@@ -16,39 +16,45 @@
 class PredicateIndex {
    public:
     struct Index {
-        phmap::btree_set<uint> s_set;
-        phmap::btree_set<uint> o_set;
+        std::vector<uint> s_set;
+        std::vector<uint> o_set;
+
+        phmap::flat_hash_map<uint, uint> sid2offset;
+        phmap::flat_hash_map<uint, uint> oid2offset;
 
         void Build(std::vector<std::pair<uint, uint>>& so_pairs);
+
+        void BuildMap();
 
         void Clear();
     };
 
     enum Type { kPO, kPS };
 
+    std::vector<Index> index_;
+
    private:
     bool compress_predicate_index_ = true;
     std::string file_path_;
     std::shared_ptr<phmap::flat_hash_map<uint, std::vector<std::pair<uint, uint>>>> pso_;
-    uint max_predicate_id_;
 
-    MMap<uint> predicate_index_;
+    uint max_predicate_id_;
+    MMap<uint> predicate_index_mmap_;
     MMap<uint> predicate_index_arrays_no_compress_;
     MMap<uint8_t> predicate_index_arrays_;
     std::vector<std::span<uint>> ps_sets_;
     std::vector<std::span<uint>> po_sets_;
 
-    void BuildPredicateIndex(std::vector<Index>& predicate_indexes);
+    void BuildPredicateIndex();
 
     void SubBuildPredicateIndex(std::deque<uint>* task_queue,
                                 std::mutex* task_queue_mutex,
                                 std::condition_variable* task_queue_cv,
-                                std::atomic<bool>* task_queue_empty,
-                                std::vector<Index>* predicate_indexes);
+                                std::atomic<bool>* task_queue_empty);
 
-    void StorePredicateIndexNoCompress(std::vector<Index>& predicate_indexes);
+    void StorePredicateIndexNoCompress();
 
-    void StorePredicateIndex(std::vector<Index>& predicate_indexes);
+    void StorePredicateIndex();
 
    public:
     PredicateIndex();
@@ -58,6 +64,8 @@ class PredicateIndex {
                    uint max_predicate_id);
 
     void Build();
+
+    void Store();
 
     std::span<uint>& GetSSet(uint pid);
 

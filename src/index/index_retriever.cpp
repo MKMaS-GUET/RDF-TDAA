@@ -14,17 +14,12 @@ IndexRetriever::IndexRetriever(std::string db_name) : db_name_(db_name) {
 
     dict_ = Dictionary(db_dictionary_path_);
 
-    spo_ = DAAs(db_index_path_, DAAs::Type::kSPO);
-    spo_.Load();
-    ops_ = DAAs(db_index_path_, DAAs::Type::kOPS);
-    ops_.Load();
-
-    subject_characteristic_set_ = CharacteristicSet(db_index_path_ + "s_c_sets");
-    subject_characteristic_set_.Load();
-    object_characteristic_set_ = CharacteristicSet(db_index_path_ + "o_c_sets");
-    object_characteristic_set_.Load();
-
     predicate_index_ = PredicateIndex(db_index_path_, dict_.predicate_cnt());
+
+    spo_ = DAAs(db_index_path_, DAAs::Type::kSPO, predicate_index_);
+    spo_.Load();
+    ops_ = DAAs(db_index_path_, DAAs::Type::kOPS, predicate_index_);
+    ops_.Load();
 
     max_subject_id_ = dict_.shared_cnt() + dict_.subject_cnt();
 
@@ -68,8 +63,7 @@ std::span<uint> IndexRetriever::GetOSet(uint pid) {
 // ?s ?p o, s ?p ?o
 std::span<uint> IndexRetriever::GetSPreSet(uint sid) {
     if (0 < sid && sid <= max_subject_id_) {
-        uint c_set_id = spo_.CharacteristicSetID(sid);
-        return subject_characteristic_set_[c_set_id];
+        return spo_.CharacteristicSetOf(sid);
     }
     return std::span<uint>();
 }
@@ -79,8 +73,7 @@ std::span<uint> IndexRetriever::GetOPreSet(uint oid) {
     if ((0 < oid && oid <= dict_.shared_cnt()) || max_subject_id_ < oid) {
         if (oid > dict_.shared_cnt())
             oid -= dict_.subject_cnt();
-        uint c_set_id = ops_.CharacteristicSetID(oid);
-        return object_characteristic_set_[c_set_id];
+        return ops_.CharacteristicSetOf(oid);
     }
     return std::span<uint>();
 }
@@ -88,13 +81,12 @@ std::span<uint> IndexRetriever::GetOPreSet(uint oid) {
 // s p ?o
 std::span<uint> IndexRetriever::GetBySP(uint sid, uint pid) {
     if (0 < sid && sid <= max_subject_id_) {
-        uint c_set_id = spo_.CharacteristicSetID(sid);
-        const auto& char_set = subject_characteristic_set_[c_set_id];
+        const auto& char_set = spo_.CharacteristicSetOf(sid);
         auto it = std::lower_bound(char_set.begin(), char_set.end(), pid);
 
         if (it != char_set.end() && *it == pid) {
             uint index = std::distance(char_set.begin(), it);
-            return spo_.AccessDAA(sid, index);
+            return spo_.AccessDAA(sid, pid, index);
         }
     }
     return std::span<uint>();
@@ -106,13 +98,12 @@ std::span<uint> IndexRetriever::GetByOP(uint oid, uint pid) {
         if (oid > dict_.shared_cnt())
             oid -= dict_.subject_cnt();
 
-        uint c_set_id = ops_.CharacteristicSetID(oid);
-        const auto& char_set = object_characteristic_set_[c_set_id];
+        const auto& char_set = ops_.CharacteristicSetOf(oid);
         auto it = std::lower_bound(char_set.begin(), char_set.end(), pid);
 
         if (it != char_set.end() && *it == pid) {
             uint index = std::distance(char_set.begin(), it);
-            return ops_.AccessDAA(oid, index);
+            return ops_.AccessDAA(oid, pid, index);
         }
     }
     return std::span<uint>();
@@ -126,10 +117,8 @@ std::span<uint> IndexRetriever::GetBySO(uint sid, uint oid) {
         if (oid > dict_.shared_cnt())
             oid -= dict_.subject_cnt();
 
-        uint s_c_set_id = spo_.CharacteristicSetID(sid);
-        uint o_c_set_id = ops_.CharacteristicSetID(oid);
-        std::span<uint>& s_c_set = subject_characteristic_set_[s_c_set_id];
-        std::span<uint>& o_c_set = object_characteristic_set_[o_c_set_id];
+        std::span<uint>& s_c_set = spo_.CharacteristicSetOf(sid);
+        std::span<uint>& o_c_set = ops_.CharacteristicSetOf(oid);
 
         for (uint i = 0; i < s_c_set.size(); i++) {
             for (uint j = 0; j < o_c_set.size(); j++) {

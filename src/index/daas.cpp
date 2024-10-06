@@ -95,9 +95,14 @@ void DAAs::DAA::create(std::vector<std::vector<uint>>& arrays) {
 
 DAAs::DAAs() {}
 
-DAAs::DAAs(std::string file_path, Type type) : type_(type), file_path_(file_path) {}
-
 DAAs::DAAs(Type type) : type_(type) {}
+
+DAAs::DAAs(std::string file_path, Type type) : file_path_(file_path), type_(type) {}
+
+DAAs::DAAs(std::string file_path, Type type, PredicateIndex& predicate_index)
+    : file_path_(file_path),
+      type_(type),
+      predicate_index_p_(std::make_shared<PredicateIndex>(predicate_index)) {}
 
 uint DAAs::EraseAndStatistic(std::vector<uint>& c_set_id,
                              std::vector<std::vector<std::vector<uint>>>& entity_set) {
@@ -277,6 +282,11 @@ void DAAs::Load() {
     daa_level_end_ = MMap<char>(file_path_ + prefix + "daa_level_end");
     daa_array_end_ = MMap<char>(file_path_ + prefix + "daa_array_end");
 
+    subject_characteristic_set_ = CharacteristicSet(file_path_ + "s_c_sets");
+    subject_characteristic_set_.Load();
+    object_characteristic_set_ = CharacteristicSet(file_path_ + "o_c_sets");
+    object_characteristic_set_.Load();
+
     uint offset = (type_ == kSPO) ? 0 : 3;
     if (compress_to_daa_ || compress_levels_) {
         MMap<uint> data_width = MMap<uint>(file_path_ + "data_width", 6 * 4);
@@ -314,8 +324,10 @@ uint DAAs::AccessBitSequence(MMap<uint>& bits, uint data_width, ulong bit_start)
     return data;
 }
 
-uint DAAs::CharacteristicSetID(uint id) {
-    return AccessToDAA((id - 1) * 2);
+std::span<uint>& DAAs::CharacteristicSetOf(uint id) {
+    uint c_set_id = AccessToDAA((id - 1) * 2);
+    return (type_ == DAAs::Type::kSPO) ? subject_characteristic_set_[c_set_id]
+                                       : object_characteristic_set_[c_set_id];
 }
 
 uint DAAs::DAASize(uint id) {
@@ -368,10 +380,13 @@ std::span<uint> DAAs::AccessDAAAllArrays(uint id) {
             offset_in_uint = 0;
     }
 
+    auto& c_set = CharacteristicSetOf(id);
     std::vector<uint>* result = new std::vector<uint>();
 
     if (daa_size == 1) {
-        result->push_back(levels_mem[0]);
+        std::span<uint>& offset2id = (type_ == DAAs::Type::kSPO) ? predicate_index_p_->GetOSet(c_set[0])
+                                                                 : predicate_index_p_->GetSSet(c_set[0]);
+        result->push_back(offset2id[levels_mem[0]]);
         return std::span<uint>(*result);
     }
 
@@ -387,6 +402,10 @@ std::span<uint> DAAs::AccessDAAAllArrays(uint id) {
     for (uint p = 0; p < predicate_cnt; p++) {
         uint offset = p;
         uint value_cnt = 0;
+        uint start_offset = result->size();
+
+        std::span<uint>& offset2id = (type_ == DAAs::Type::kSPO) ? predicate_index_p_->GetOSet(c_set[p])
+                                                                 : predicate_index_p_->GetSSet(c_set[p]);
 
         uint levels_offset = daa_offset + offset;
         result->push_back(levels_mem[levels_offset - daa_offset]);
@@ -400,6 +419,8 @@ std::span<uint> DAAs::AccessDAAAllArrays(uint id) {
 
             result->push_back(levels_mem[levels_offset - daa_offset] + result->back());
         }
+        for (uint i = start_offset; i < result->size(); i++)
+            result->operator[](i) = offset2id[result->at(i)];
     }
 
     return std::span<uint>(*result);
@@ -427,7 +448,7 @@ uint DAAs::AccessLevels(ulong offset) {
     }
 }
 
-std::span<uint> DAAs::AccessDAA(uint id, uint index) {
+std::span<uint> DAAs::AccessDAA(uint id, uint pid, uint index) {
     auto [daa_offset, daa_size] = DAAOffsetSize(id);
 
     uint value;
@@ -438,11 +459,15 @@ std::span<uint> DAAs::AccessDAA(uint id, uint index) {
 
     std::vector<uint>* result = new std::vector<uint>;
     result->push_back(value);
-
-    if (daa_size == 1)
-        return std::span<uint>(*result);
+    
+    std::span<uint>& offset2id =
+        (type_ == DAAs::Type::kSPO) ? predicate_index_p_->GetOSet(pid) : predicate_index_p_->GetSSet(pid);
 
     One one = One(daa_level_end_, daa_offset, daa_offset + daa_size);
+    if (daa_size == 1) {
+        result->operator[](0) = offset2id[result->at(0)];
+        return std::span<uint>(*result);
+    }
 
     uint level_start = daa_offset;
     while (!bit_get(daa_array_end_, value_offset)) {
@@ -454,6 +479,9 @@ std::span<uint> DAAs::AccessDAA(uint id, uint index) {
         value = AccessLevels(value_offset) + result->back();
         result->push_back(value);
     }
+
+    for (uint i = 0; i < result->size(); i++)
+        result->operator[](i) = offset2id[result->at(i)];
 
     return std::span<uint>(*result);
 }

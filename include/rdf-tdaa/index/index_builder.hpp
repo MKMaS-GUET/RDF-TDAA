@@ -13,6 +13,7 @@
 
 #include "rdf-tdaa/dictionary/dictionary.hpp"
 #include "rdf-tdaa/index/daas.hpp"
+#include "rdf-tdaa/index/predicate_index.hpp"
 
 namespace fs = std::filesystem;
 
@@ -35,7 +36,8 @@ class IndexBuilder {
 
     void BuildCharacteristicSet(std::vector<uint>& c_set_id, std::vector<uint>& c_set_size, DAAs::Type type);
 
-    void BuildEntitySets(std::vector<uint>& c_set_size,
+    void BuildEntitySets(PredicateIndex& predicate_index,
+                         std::vector<uint>& c_set_size,
                          std::vector<std::vector<std::vector<uint>>>& entity_set,
                          DAAs::Type type);
 

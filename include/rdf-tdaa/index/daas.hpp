@@ -4,6 +4,8 @@
 #include <memory>
 #include <span>
 #include <vector>
+#include "rdf-tdaa/index/characteristic_set.hpp"
+#include "rdf-tdaa/index/predicate_index.hpp"
 #include "rdf-tdaa/utils/mmap.hpp"
 
 #define bit_set(bits, offset) ((bits)[(offset) / 8] |= (1 << (7 - (offset) % 8)))
@@ -52,8 +54,14 @@ class DAAs {
     bool compress_to_daa_ = true;
     bool compress_levels_ = true;
 
-    DAAs::Type type_;
     std::string file_path_;
+    DAAs::Type type_;
+
+    std::shared_ptr<PredicateIndex> predicate_index_p_;
+
+    CharacteristicSet subject_characteristic_set_;
+    CharacteristicSet object_characteristic_set_;
+
     uint c_set_id_width_;
     uint daa_offset_width_;
     uint daa_levels_width_;
@@ -74,21 +82,23 @@ class DAAs {
    public:
     DAAs();
 
+    DAAs(Type type);
+
     DAAs(std::string file_path, Type type);
 
-    DAAs(Type type);
+    DAAs(std::string file_path, Type type, PredicateIndex& predicate_index_);
 
     void Build(std::vector<uint>& c_set_id, std::vector<std::vector<std::vector<uint>>>& entity_set);
 
     void Load();
 
-    uint CharacteristicSetID(uint id);
+    std::span<uint>& CharacteristicSetOf(uint id);
 
     uint DAASize(uint id);
 
     uint AccessLevels(ulong offset);
 
-    std::span<uint> AccessDAA(uint id, uint offset);
+    std::span<uint> AccessDAA(uint id, uint pid, uint offset);
 
     std::span<uint> AccessDAAAllArrays(uint id);
 

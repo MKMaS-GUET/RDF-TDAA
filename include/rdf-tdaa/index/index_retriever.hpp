@@ -26,8 +26,8 @@ class IndexRetriever {
 
     PredicateIndex predicate_index_;
 
-    CharacteristicSet subject_characteristic_set_;
-    CharacteristicSet object_characteristic_set_;
+    // CharacteristicSet subject_characteristic_set_;
+    // CharacteristicSet object_characteristic_set_;
 
     ulong max_subject_id_;
 
