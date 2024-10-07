@@ -12,13 +12,16 @@ void Endpoint::query(const httplib::Request& req, httplib::Response& res) {
 
         auto parser = std::make_shared<SPARQLParser>(sparql);
 
-        auto triple_partterns =
-            std::make_shared<std::vector<SPARQLParser::TriplePattern>>(parser->TriplePatterns());
-        auto query_plan = std::make_shared<PlanGenerator>(db_index, triple_partterns);
+        auto query_plan = std::make_shared<PlanGenerator>(db_index, parser);
         auto executor =
             std::make_shared<QueryExecutor>(db_index, query_plan, parser->Limit(), db_index->shared_cnt());
-        if (!query_plan->zero_result())
+        if (!query_plan->zero_result()) {
             executor->Query();
+            if (!query_plan->three_variable_pattern().constant_variable.empty()) {
+                executor->HandleThreeVariablePattern(parser->project_modifier(), parser->ProjectVariables());
+            }
+        }
+
         std::vector<std::vector<uint>>& results_id = executor->result();
 
         std::cout << results_id.size() << " ";
@@ -169,7 +172,7 @@ bool Endpoint::start_server(const std::string& ip, const std::string& port, cons
 
     svr.set_base_dir("./");
 
-    std::string base_url = "/epei";
+    std::string base_url = "/rdftdaa";
 
     db_index = std::make_shared<IndexRetriever>(db);
     db_name = db;

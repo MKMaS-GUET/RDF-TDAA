@@ -6,6 +6,7 @@ QueryExecutor::Stat::Stat(const std::vector<std::vector<PlanGenerator::Item>>& p
     candidate_indices.resize(n);
     candidate_value.resize(n);
     current_tuple.resize(n);
+    result = std::make_shared<std::vector<std::vector<uint>>>();
 
     for (long unsigned int i = 0; i < n; i++) {
         candidate_value[i] = std::span<uint>();
@@ -43,6 +44,7 @@ QueryExecutor::QueryExecutor(std::shared_ptr<IndexRetriever> index,
       filled_item_indices_(plan->filled_item_indices()),
       empty_item_indices_(plan->empty_item_indices()),
       pre_results_(plan->pre_results()),
+      three_variable_pattern_(plan->three_variable_pattern()),
       limit_(limit),
       shared_cnt_(shared_cnt) {}
 
@@ -301,8 +303,8 @@ void QueryExecutor::Query() {
         } else {
             // 补完一个查询结果
             if (stat_.level == int(stat_.plan.size() - 1)) {
-                stat_.result.push_back(stat_.current_tuple);
-                if (stat_.result.size() >= limit_)
+                stat_.result->push_back(stat_.current_tuple);
+                if (stat_.result->size() >= limit_)
                     break;
                 Next(stat_);
             } else {
@@ -315,10 +317,108 @@ void QueryExecutor::Query() {
     query_duration_ = end - begin;
 }
 
+void QueryExecutor::HandleThreeVariablePattern(SPARQLParser::ProjectModifier modifier,
+                                               const std::vector<std::string>& project_variables) {
+    std::shared_ptr<std::vector<std::vector<uint>>> new_result =
+        std::make_shared<std::vector<std::vector<uint>>>();
+
+    new_result->reserve(stat_.result->size() * 2);
+    phmap::flat_hash_set<uint> distinct_result;
+    uint distinct_position = 0;
+
+    uint result_tuple_size = stat_.result->at(0).size();
+    uint new_result_tuple_size = result_tuple_size;
+
+    if (three_variable_pattern_.retrieval_type == PlanGenerator::ThreeVariablePattern::kS) {
+        new_result_tuple_size += 2;
+        for (const auto& result : *stat_.result) {
+            uint s_id = result[three_variable_pattern_.constant_variable[0]->priority];
+            std::span<uint> c_set = index_->GetSPreSet(s_id);
+            if (three_variable_pattern_.distinct_position != 1) {
+                for (auto p_id : c_set) {
+                    auto o_ids = index_->GetBySP(s_id, p_id);
+
+                    std::vector<uint> temp_result(result);
+                    temp_result.resize(result.size() + 2);
+
+                    for (auto o_id : o_ids) {
+                        temp_result[result.size()] = p_id;
+                        temp_result[result.size() + 1] = o_id;
+                        new_result->push_back(temp_result);
+                    }
+                }
+            } else {
+                distinct_position = result_tuple_size;
+                for (auto p_id : c_set) {
+                    distinct_result.insert(p_id);
+                }
+            }
+        }
+    }
+
+    if (three_variable_pattern_.retrieval_type == PlanGenerator::ThreeVariablePattern::kO) {
+        new_result_tuple_size += 2;
+        for (const auto& result : *stat_.result) {
+            uint o_id = result[three_variable_pattern_.constant_variable[0]->priority];
+            std::span<uint> c_set = index_->GetSPreSet(o_id);
+            if (three_variable_pattern_.distinct_position != 1) {
+                for (auto p_id : c_set) {
+                    auto s_ids = index_->GetBySP(o_id, p_id);
+
+                    std::vector<uint> temp_result(result);
+                    temp_result.resize(result.size() + 2);
+
+                    for (auto s_id : s_ids) {
+                        temp_result[result.size()] = p_id;
+                        temp_result[result.size() + 1] = s_id;
+                        new_result->push_back(temp_result);
+                    }
+                }
+            } else {
+                distinct_position = result_tuple_size + 1;
+                for (auto p_id : c_set) {
+                    distinct_result.insert(p_id);
+                }
+            }
+        }
+    }
+
+    if (three_variable_pattern_.retrieval_type == PlanGenerator::ThreeVariablePattern::kSO) {
+        new_result_tuple_size += 1;
+        for (const auto& result : *stat_.result) {
+            uint s_id = result[three_variable_pattern_.constant_variable[0]->priority];
+            uint o_id = result[three_variable_pattern_.constant_variable[1]->priority];
+            std::span<uint> p_set = index_->GetBySO(s_id, o_id);
+            if (three_variable_pattern_.distinct_position != 1) {
+                for (auto p_id : p_set) {
+                    std::vector<uint> temp_result(result);
+                    temp_result.resize(new_result_tuple_size);
+                    temp_result[result_tuple_size] = p_id;
+                    new_result->push_back(temp_result);
+                }
+            } else {
+                distinct_position = result_tuple_size;
+                for (auto p_id : p_set) {
+                    distinct_result.insert(p_id);
+                }
+            }
+        }
+    }
+
+    if (three_variable_pattern_.distinct_position == 1) {
+        for (auto it = distinct_result.begin(); it != distinct_result.end(); it++) {
+            std::vector<uint> temp_result(new_result_tuple_size);
+            temp_result[distinct_position] = *it;
+            new_result->push_back(temp_result);
+        }
+    }
+    stat_.result = new_result;
+}
+
 double QueryExecutor::query_duration() {
     return query_duration_.count();
 }
 
 std::vector<std::vector<uint>>& QueryExecutor::result() {
-    return stat_.result;
+    return *stat_.result;
 }

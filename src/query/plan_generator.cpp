@@ -29,6 +29,9 @@ PlanGenerator::Variable::Variable() : value(""), count(0) {}
 
 PlanGenerator::Variable::Variable(std::string value) : value(value), count(1) {}
 
+PlanGenerator::Variable::Variable(std::string value, ulong priority, SPARQLParser::Term::Positon position)
+    : value(value), priority(priority), count(1), position(position) {}
+
 PlanGenerator::Variable& PlanGenerator::Variable::operator=(const Variable& other) {
     if (this != &other) {
         value = other.value;
@@ -40,8 +43,8 @@ PlanGenerator::Variable& PlanGenerator::Variable::operator=(const Variable& othe
 }
 
 PlanGenerator::PlanGenerator(std::shared_ptr<IndexRetriever>& index,
-                             std::shared_ptr<std::vector<SPARQLParser::TriplePattern>>& triple_partterns)
-    : index_(index), triple_partterns_(triple_partterns) {
+                             std::shared_ptr<SPARQLParser>& sparql_parser)
+    : index_(index), sparql_parser_(sparql_parser) {
     Generate();
 }
 
@@ -99,14 +102,14 @@ std::vector<std::deque<std::string>> PlanGenerator::FindAllPathsInGraph(const Ad
 }
 
 void PlanGenerator::Generate() {
-    bool debug = false;
-
     AdjacencyList query_graph_ud;
     hash_map<std::string, uint> est_size;
     hash_map<std::string, Variable> univariates;
 
+    const std::vector<SPARQLParser::TriplePattern>& triple_partterns = sparql_parser_->TriplePatterns();
+
     // one variable
-    for (const auto& triple_parttern : *triple_partterns_) {
+    for (const auto& triple_parttern : triple_partterns) {
         auto& s = triple_parttern.subject;
         auto& p = triple_parttern.predicate;
         auto& o = triple_parttern.object;
@@ -144,7 +147,7 @@ void PlanGenerator::Generate() {
     }
 
     // two variables
-    for (const auto& triple_parttern : *triple_partterns_) {
+    for (const auto& triple_parttern : triple_partterns) {
         auto& s = triple_parttern.subject;
         auto& p = triple_parttern.predicate;
         auto& o = triple_parttern.object;
@@ -191,7 +194,102 @@ void PlanGenerator::Generate() {
         }
     }
 
-    if (debug) {
+    int three_variable_triple_pattern_offset = -1;
+    for (uint i = 0; i < triple_partterns.size(); i++) {
+        auto& tp = triple_partterns[i];
+        auto& p = tp.predicate;
+
+        if (tp.subject.IsVariable() && p.IsVariable() && tp.object.IsVariable()) {
+            if (univariates.contains(p.value) || query_graph_ud.contains(p.value) ||
+                three_variable_triple_pattern_offset != -1) {
+                zero_result_ = true;
+                std::cout << "not support yet !" << std::endl;
+                return;
+            }
+            if (three_variable_triple_pattern_offset == -1)
+                three_variable_triple_pattern_offset = i;
+        }
+    }
+
+    if (query_graph_ud.size() == 0 && univariates.size() == 1 && three_variable_triple_pattern_offset == -1) {
+        variable_order_.push_back(univariates.begin()->second);
+        GenPlanTable();
+        return;
+    }
+
+    SortVariables(query_graph_ud, univariates, est_size);
+
+    if (three_variable_triple_pattern_offset != -1) {
+        auto& tp = triple_partterns[three_variable_triple_pattern_offset];
+        auto& s = tp.subject;
+        auto& o = tp.object;
+
+        if (sparql_parser_->project_modifier().modifier_type == SPARQLParser::ProjectModifier::Distinct) {
+            auto& variables = sparql_parser_->ProjectVariables();
+            if (variables.size() == 1) {
+                if (s.value == variables[0])
+                    three_variable_pattern_.distinct_position = 0;
+                if (tp.predicate.value == variables[0])
+                    three_variable_pattern_.distinct_position = 1;
+                if (o.value == variables[0])
+                    three_variable_pattern_.distinct_position = 2;
+            }
+        }
+
+        bool s_contains = false, o_contains = false;
+        for (uint i = 0; i < variable_order_.size(); i++) {
+            if (variable_order_[i].value == s.value) {
+                three_variable_pattern_.constant_variable.push_back(&variable_order_[i]);
+                three_variable_pattern_.retrieval_type = ThreeVariablePattern::RType::kS;
+                s_contains = true;
+            }
+            if (variable_order_[i].value == o.value) {
+                three_variable_pattern_.constant_variable.push_back(&variable_order_[i]);
+                three_variable_pattern_.retrieval_type = ThreeVariablePattern::RType::kO;
+                o_contains = true;
+            }
+        }
+        if (s_contains && !o_contains) {
+            three_variable_pattern_.retrieval_variables.push_back(
+                {tp.predicate.value, variable_order_.size(), SPARQLParser::Term::Positon::kPredicate});
+            three_variable_pattern_.retrieval_variables.push_back(
+                {o.value, variable_order_.size() + 1, SPARQLParser::Term::Positon::kObject});
+        }
+        if (o_contains) {
+            uint p_priority = variable_order_.size();
+            if (!s_contains) {
+                three_variable_pattern_.retrieval_variables.push_back(
+                    {s.value, variable_order_.size(), SPARQLParser::Term::Positon::kSubject});
+                p_priority += 1;
+            }
+            three_variable_pattern_.retrieval_variables.push_back(
+                {tp.predicate.value, p_priority, SPARQLParser::Term::Positon::kPredicate});
+        }
+
+        if (three_variable_pattern_.constant_variable.size() == 0) {
+            zero_result_ = true;
+            return;
+        }
+
+        if (three_variable_pattern_.constant_variable.size() == 2)
+            three_variable_pattern_.retrieval_type = ThreeVariablePattern::RType::kSO;
+    }
+
+    if (debug_) {
+        std::cout << "variables order: " << std::endl;
+        for (auto it = variable_order_.begin(); it != variable_order_.end(); it++)
+            std::cout << it->value << " ";
+        std::cout << std::endl;
+        std::cout << "------------------------------" << std::endl;
+    }
+
+    GenPlanTable();
+}
+
+void PlanGenerator::SortVariables(AdjacencyList& query_graph_ud,
+                                  hash_map<std::string, Variable>& univariates,
+                                  hash_map<std::string, uint>& est_size) {
+    if (debug_) {
         for (auto vertex_it = query_graph_ud.begin(); vertex_it != query_graph_ud.end(); vertex_it++) {
             std::cout << vertex_it->first << ": ";
             for (auto& edge : vertex_it->second) {
@@ -210,12 +308,6 @@ void PlanGenerator::Generate() {
     std::transform(query_graph_ud.begin(), query_graph_ud.end(), variable_priority.begin(),
                    [](const auto& pair) { return pair.first; });
 
-    if (variable_priority.size() == 0 && univariates.size() == 1) {
-        variable_order_.push_back(univariates.begin()->second);
-        GenPlanTable();
-        return;
-    }
-
     auto sort_func = [&](const auto& var1, const auto& var2) {
         if (query_graph_ud[var1].size() + univariates[var1].count !=
             query_graph_ud[var2].size() + univariates[var2].count) {
@@ -227,7 +319,7 @@ void PlanGenerator::Generate() {
 
     std::sort(variable_priority.begin(), variable_priority.end(), sort_func);
 
-    if (debug) {
+    if (debug_) {
         std::cout << "------------------------------" << std::endl;
         for (auto& v : variable_priority) {
             std::cout << v << ": " << est_size[v] << std::endl;
@@ -255,7 +347,7 @@ void PlanGenerator::Generate() {
         }
     }
 
-    if (debug) {
+    if (debug_) {
         std::cout << "longest_path: " << longest_path << std::endl;
         for (auto& path : all_paths) {
             for (auto it = path.begin(); it != path.end(); it++)
@@ -309,16 +401,6 @@ void PlanGenerator::Generate() {
         if (!contains)
             variable_order_.push_back(it->first);
     }
-
-    if (debug) {
-        std::cout << "variables order: " << std::endl;
-        for (auto it = variable_order_.begin(); it != variable_order_.end(); it++)
-            std::cout << it->value << " ";
-        std::cout << std::endl;
-        std::cout << "------------------------------" << std::endl;
-    }
-
-    GenPlanTable();
 }
 
 void PlanGenerator::GenPlanTable() {
@@ -334,7 +416,7 @@ void PlanGenerator::GenPlanTable() {
     empty_item_indices_.resize(n);
 
     uint triple_pattern_id = 0;
-    for (const auto& triple_parttern : *triple_partterns_) {
+    for (const auto& triple_parttern : sparql_parser_->TriplePatterns()) {
         auto& s = triple_parttern.subject;
         auto& p = triple_parttern.predicate;
         auto& o = triple_parttern.object;
@@ -433,8 +515,19 @@ std::vector<PlanGenerator::Variable> PlanGenerator::MappingVariable(
     const std::vector<std::string>& variables) {
     std::vector<Variable> ret;
     ret.reserve(variables.size());
-    for (const auto& var : variables)
-        ret.push_back(*value2variable_.at(var));
+    for (const auto& var : variables) {
+        bool find = false;
+        for (uint i = 0; i < three_variable_pattern_.retrieval_variables.size(); i++) {
+            if (three_variable_pattern_.retrieval_variables[i].value == var) {
+                ret.push_back(three_variable_pattern_.retrieval_variables[i]);
+                find = true;
+                break;
+            }
+        }
+        if (!find)
+            ret.push_back(*value2variable_.at(var));
+    }
+
     return ret;
 }
 
@@ -456,6 +549,10 @@ std::vector<std::vector<uint>>& PlanGenerator::empty_item_indices() {
 
 std::vector<std::vector<std::span<uint>>>& PlanGenerator::pre_results() {
     return pre_results_;
+}
+
+PlanGenerator::ThreeVariablePattern& PlanGenerator::three_variable_pattern() {
+    return three_variable_pattern_;
 }
 
 bool PlanGenerator::zero_result() {

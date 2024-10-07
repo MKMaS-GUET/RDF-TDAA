@@ -114,16 +114,19 @@ void RDFTDAA::Query(const std::string& db_name, const std::string& data_file) {
 
             auto start = std::chrono::high_resolution_clock::now();
             auto parser = std::make_shared<SPARQLParser>(sparql);
-            auto triple_partterns =
-                std::make_shared<std::vector<SPARQLParser::TriplePattern>>(parser->TriplePatterns());
 
-            auto query_plan = std::make_shared<PlanGenerator>(index, triple_partterns);
+            auto query_plan = std::make_shared<PlanGenerator>(index, parser);
             auto plan_end = std::chrono::high_resolution_clock::now();
 
             auto executor =
                 std::make_shared<QueryExecutor>(index, query_plan, parser->Limit(), index->shared_cnt());
-            if (!query_plan->zero_result())
+            if (!query_plan->zero_result()) {
                 executor->Query();
+                if (!query_plan->three_variable_pattern().constant_variable.empty()) {
+                    executor->HandleThreeVariablePattern(parser->project_modifier(),
+                                                         parser->ProjectVariables());
+                }
+            }
 
             auto projection_start = std::chrono::high_resolution_clock::now();
             uint cnt = QueryResult(executor->result(), index, query_plan, parser);

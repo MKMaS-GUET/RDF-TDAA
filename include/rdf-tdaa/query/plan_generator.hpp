@@ -1,10 +1,8 @@
 #ifndef PLAN_GENERATOR_HPP
 #define PLAN_GENERATOR_HPP
 
-// #include <parallel_hashmap/phmap.h>
 #include <climits>
 #include <deque>
-#include <numeric>  // 包含 accumulate 函数
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -38,30 +36,49 @@ class PlanGenerator {
 
     struct Variable {
         std::string value;
-        uint priority;
+        ulong priority;
         uint count;
         SPARQLParser::Term::Positon position;
 
         Variable();
         Variable(std::string value);
+        Variable(std::string value, ulong priority, SPARQLParser::Term::Positon position);
 
         Variable& operator=(const Variable& other);
     };
 
+    struct ThreeVariablePattern {
+        enum RType { kS, kO, kOP, kSP, kSO };
+
+        RType retrieval_type;
+        std::vector<Variable*> constant_variable;
+        std::vector<Variable> retrieval_variables;
+        int distinct_position = -1;
+
+        ThreeVariablePattern() = default;
+    };
+
    private:
+    bool debug_ = false;
     std::shared_ptr<IndexRetriever>& index_;
-    std::shared_ptr<std::vector<SPARQLParser::TriplePattern>> triple_partterns_;
+    std::shared_ptr<SPARQLParser>& sparql_parser_;
     std::vector<Variable> variable_order_;
     hash_map<std::string, Variable*> value2variable_;
     std::vector<std::vector<Item>> query_plan_;
     std::vector<std::vector<uint>> filled_item_indices_;
     std::vector<std::vector<uint>> empty_item_indices_;
     std::vector<std::vector<std::span<uint>>> pre_results_;
+    ThreeVariablePattern three_variable_pattern_;
     bool zero_result_ = false;
 
+    void SortVariables(AdjacencyList& query_graph_ud,
+                       hash_map<std::string, Variable>& univariates,
+                       hash_map<std::string, uint>& est_size);
+
+    void GenPlanTable();
+
    public:
-    PlanGenerator(std::shared_ptr<IndexRetriever>& index,
-                  std::shared_ptr<std::vector<SPARQLParser::TriplePattern>>& triple_partterns);
+    PlanGenerator(std::shared_ptr<IndexRetriever>& index, std::shared_ptr<SPARQLParser>& sparql_parser);
 
     void DFS(const AdjacencyList& graph,
              std::string vertex,
@@ -75,8 +92,6 @@ class PlanGenerator {
 
     void Generate();
 
-    void GenPlanTable();
-
     std::vector<Variable> MappingVariable(const std::vector<std::string>& variables);
 
     std::vector<std::vector<Item>>& query_plan();
@@ -84,6 +99,7 @@ class PlanGenerator {
     std::vector<std::vector<uint>>& filled_item_indices();
     std::vector<std::vector<uint>>& empty_item_indices();
     std::vector<std::vector<std::span<uint>>>& pre_results();
+    ThreeVariablePattern& three_variable_pattern();
     bool zero_result();
 };
 

@@ -18,7 +18,7 @@ class QueryExecutor {
         std::vector<uint> current_tuple;
         std::vector<std::span<uint>> candidate_value;
         std::vector<uint> candidate_indices;
-        std::vector<std::vector<uint>> result;
+        std::shared_ptr<std::vector<std::vector<uint>>> result;
         std::vector<std::vector<PlanGenerator::Item>> plan;
 
         Stat(const std::vector<std::vector<PlanGenerator::Item>>& p);
@@ -33,6 +33,7 @@ class QueryExecutor {
     std::vector<std::vector<uint>>& filled_item_indices_;
     std::vector<std::vector<uint>>& empty_item_indices_;
     std::vector<std::vector<std::span<uint>>>& pre_results_;
+    PlanGenerator::ThreeVariablePattern three_variable_pattern_;
     std::vector<std::span<uint>> pre_join_;
     uint limit_;
     uint shared_cnt_;
@@ -63,6 +64,9 @@ class QueryExecutor {
                   uint shared_cnt);
 
     void Query();
+
+    void HandleThreeVariablePattern(SPARQLParser::ProjectModifier modifier,
+                                    const std::vector<std::string>& project_variables);
 
     double query_duration();
 
