@@ -13,6 +13,7 @@ IndexRetriever::IndexRetriever(std::string db_name) : db_name_(db_name) {
     db_index_path_ = "./DB_DATA_ARCHIVE/" + db_name_ + "/index/";
 
     dict_ = Dictionary(db_dictionary_path_);
+    max_subject_id_ = dict_.shared_cnt() + dict_.subject_cnt();
 
     predicate_index_ = PredicateIndex(db_index_path_, dict_.predicate_cnt());
 
@@ -21,11 +22,9 @@ IndexRetriever::IndexRetriever(std::string db_name) : db_name_(db_name) {
     ops_ = DAAs(db_index_path_, DAAs::Type::kOPS, predicate_index_);
     ops_.Load();
 
-    max_subject_id_ = dict_.shared_cnt() + dict_.subject_cnt();
-
     auto end = std::chrono::high_resolution_clock::now();
     std::chrono::duration<double, std::milli> diff = end - beg;
-    std::cout << "init db success. takes " << diff.count() << " ms." << std::endl;
+    std::cout << "init db dictionary success. takes " << diff.count() << " ms." << std::endl;
 }
 
 ulong IndexRetriever::FileSize(std::string file_name) {
@@ -114,6 +113,7 @@ std::span<uint> IndexRetriever::GetBySO(uint sid, uint oid) {
     std::vector<uint>* result = new std::vector<uint>;
 
     if ((0 < sid && sid <= max_subject_id_) && (oid <= dict_.shared_cnt() || max_subject_id_ < oid)) {
+        uint original_oid = oid;
         if (oid > dict_.shared_cnt())
             oid -= dict_.subject_cnt();
 
@@ -124,7 +124,7 @@ std::span<uint> IndexRetriever::GetBySO(uint sid, uint oid) {
             for (uint j = 0; j < o_c_set.size(); j++) {
                 if (s_c_set[i] == o_c_set[j]) {
                     auto r = GetBySP(sid, s_c_set[i]);
-                    bool found = std::binary_search(r.begin(), r.end(), oid);
+                    bool found = std::binary_search(r.begin(), r.end(), original_oid);
                     if (found)
                         result->push_back(s_c_set[i]);
                 }

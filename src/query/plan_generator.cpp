@@ -237,14 +237,15 @@ void PlanGenerator::Generate() {
         }
 
         bool s_contains = false, o_contains = false;
+        three_variable_pattern_.constant_variable = std::vector<Variable*>(2);
         for (uint i = 0; i < variable_order_.size(); i++) {
             if (variable_order_[i].value == s.value) {
-                three_variable_pattern_.constant_variable.push_back(&variable_order_[i]);
+                three_variable_pattern_.constant_variable[0] = &variable_order_[i];
                 three_variable_pattern_.retrieval_type = ThreeVariablePattern::RType::kS;
                 s_contains = true;
             }
             if (variable_order_[i].value == o.value) {
-                three_variable_pattern_.constant_variable.push_back(&variable_order_[i]);
+                three_variable_pattern_.constant_variable[1] = &variable_order_[i];
                 three_variable_pattern_.retrieval_type = ThreeVariablePattern::RType::kO;
                 o_contains = true;
             }
@@ -271,7 +272,7 @@ void PlanGenerator::Generate() {
             return;
         }
 
-        if (three_variable_pattern_.constant_variable.size() == 2)
+        if (s_contains && o_contains)
             three_variable_pattern_.retrieval_type = ThreeVariablePattern::RType::kSO;
     }
 

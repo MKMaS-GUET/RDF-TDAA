@@ -359,7 +359,7 @@ void QueryExecutor::HandleThreeVariablePattern(SPARQLParser::ProjectModifier mod
     if (three_variable_pattern_.retrieval_type == PlanGenerator::ThreeVariablePattern::kO) {
         new_result_tuple_size += 2;
         for (const auto& result : *stat_.result) {
-            uint o_id = result[three_variable_pattern_.constant_variable[0]->priority];
+            uint o_id = result[three_variable_pattern_.constant_variable[1]->priority];
             std::span<uint> c_set = index_->GetSPreSet(o_id);
             if (three_variable_pattern_.distinct_position != 1) {
                 for (auto p_id : c_set) {
