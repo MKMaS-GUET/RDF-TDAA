@@ -10,13 +10,22 @@
 #include "rdf-tdaa/index/index_retriever.hpp"
 #include "rdf-tdaa/utils/join_list.hpp"
 
-// using Result = ResultList::Result;
 using AdjacencyList = std::unordered_map<std::string, std::vector<std::pair<std::string, uint>>>;
 
 class PlanGenerator {
    public:
     struct Item {
-        enum RType { kSP, kOP, kSO, kNone };
+        enum RType {
+            kGetBySP,
+            kGetByOP,
+            kGetBySO,
+            kOtherSet,
+            kGetSPreSet,
+            kGetOPreSet,
+            kGetSSet,
+            kGetOSet,
+            kNone
+        };
         enum PType { kPreSub, kPreObj, kSubject, kPredicate, kObject, kEmpty };
 
         RType retrieval_type;
@@ -25,6 +34,7 @@ class PlanGenerator {
 
         uint triple_pattern_id;
         uint search_id;
+        uint father_item_id;
         uint empty_item_level;
 
         Item() = default;
@@ -47,17 +57,6 @@ class PlanGenerator {
         Variable& operator=(const Variable& other);
     };
 
-    struct ThreeVariablePattern {
-        enum RType { kS, kO, kOP, kSP, kSO };
-
-        RType retrieval_type;
-        std::vector<Variable*> constant_variable;
-        std::vector<Variable> retrieval_variables;
-        int distinct_position = -1;
-
-        ThreeVariablePattern() = default;
-    };
-
    private:
     bool debug_ = false;
     std::shared_ptr<IndexRetriever>& index_;
@@ -68,7 +67,7 @@ class PlanGenerator {
     std::vector<std::vector<uint>> filled_item_indices_;
     std::vector<std::vector<uint>> empty_item_indices_;
     std::vector<std::vector<std::span<uint>>> pre_results_;
-    ThreeVariablePattern three_variable_pattern_;
+    bool distinct_predicate_ = false;
     bool zero_result_ = false;
 
     void SortVariables(AdjacencyList& query_graph_ud,
@@ -99,8 +98,8 @@ class PlanGenerator {
     std::vector<std::vector<uint>>& filled_item_indices();
     std::vector<std::vector<uint>>& empty_item_indices();
     std::vector<std::vector<std::span<uint>>>& pre_results();
-    ThreeVariablePattern& three_variable_pattern();
     bool zero_result();
+    bool distinct_predicate();
 };
 
 #endif

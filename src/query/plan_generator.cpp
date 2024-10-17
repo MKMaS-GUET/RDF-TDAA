@@ -11,6 +11,7 @@ PlanGenerator::Item::Item(const Item& other)
       index_result(other.index_result),
       triple_pattern_id(other.triple_pattern_id),
       search_id(other.search_id),
+      father_item_id(other.father_item_id),
       empty_item_level(other.empty_item_level) {}
 
 PlanGenerator::Item& PlanGenerator::Item::operator=(const Item& other) {
@@ -20,6 +21,7 @@ PlanGenerator::Item& PlanGenerator::Item::operator=(const Item& other) {
         index_result = other.index_result;
         triple_pattern_id = other.triple_pattern_id;
         search_id = other.search_id;
+        father_item_id = other.father_item_id;
         empty_item_level = other.empty_item_level;
     }
     return *this;
@@ -108,29 +110,28 @@ void PlanGenerator::Generate() {
 
     const std::vector<SPARQLParser::TriplePattern>& triple_partterns = sparql_parser_->TriplePatterns();
 
-    // one variable
     for (const auto& triple_parttern : triple_partterns) {
         auto& s = triple_parttern.subject;
         auto& p = triple_parttern.predicate;
         auto& o = triple_parttern.object;
 
-        uint size = 0;
-        std::string v_value;
+        // one variable
+        if (triple_parttern.variable_cnt == 1) {
+            uint size = 0;
+            std::string v_value;
 
-        if (s.IsVariable() && !p.IsVariable() && !o.IsVariable()) {
-            v_value = s.value;
-            size = index_->GetByOPSize(index_->Term2ID(o), index_->Term2ID(p));
-        }
-        if (!s.IsVariable() && p.IsVariable() && !o.IsVariable()) {
-            v_value = p.value;
-            size = index_->GetBySOSize(index_->Term2ID(s), index_->Term2ID(o));
-        }
-        if (!s.IsVariable() && !p.IsVariable() && o.IsVariable()) {
-            v_value = o.value;
-            size = index_->GetBySPSize(index_->Term2ID(s), index_->Term2ID(p));
-        }
-
-        if (triple_parttern.variale_cnt == 1) {
+            if (s.IsVariable() && !p.IsVariable() && !o.IsVariable()) {
+                v_value = s.value;
+                size = index_->GetByOPSize(index_->Term2ID(o), index_->Term2ID(p));
+            }
+            if (!s.IsVariable() && p.IsVariable() && !o.IsVariable()) {
+                v_value = p.value;
+                size = index_->GetBySOSize(index_->Term2ID(s), index_->Term2ID(o));
+            }
+            if (!s.IsVariable() && !p.IsVariable() && o.IsVariable()) {
+                v_value = o.value;
+                size = index_->GetBySPSize(index_->Term2ID(s), index_->Term2ID(p));
+            }
             if (size == 0) {
                 zero_result_ = true;
                 return;
@@ -144,136 +145,97 @@ void PlanGenerator::Generate() {
                 univariates.insert({v_value, Variable(v_value)});
             }
         }
+
+        // two variables
+        if (triple_parttern.variable_cnt == 2) {
+            std::string v_value_1;
+            std::string v_value_2;
+            uint edge = 0;
+            uint size1 = 0;
+            uint size2 = 0;
+
+            if (s.IsVariable() && !p.IsVariable() && o.IsVariable()) {
+                v_value_1 = s.value;
+                v_value_2 = o.value;
+                edge = index_->Term2ID(p);
+                size1 = index_->GetSSetSize(edge);
+                size2 = index_->GetOSetSize(edge);
+            }
+            if (!s.IsVariable() && p.IsVariable() && o.IsVariable()) {
+                v_value_1 = p.value;
+                v_value_2 = o.value;
+                edge = index_->Term2ID(s);
+                size1 = index_->GetSPreSet(edge).size();
+                size2 = index_->GetBySSize(edge);
+            }
+            if (s.IsVariable() && p.IsVariable() && !o.IsVariable()) {
+                v_value_1 = s.value;
+                v_value_2 = p.value;
+                edge = index_->Term2ID(o);
+                size1 = index_->GetByOSize(edge);
+                size2 = index_->GetOPreSet(edge).size();
+            }
+
+            if (edge == 0) {
+                zero_result_ = true;
+                return;
+            }
+            query_graph_ud[v_value_1].push_back({v_value_2, edge});
+            query_graph_ud[v_value_2].push_back({v_value_1, edge});
+            if (est_size[v_value_1] == 0 || est_size[v_value_1] > size1)
+                est_size[v_value_1] = size1;
+            if (est_size[v_value_2] == 0 || est_size[v_value_2] > size2)
+                est_size[v_value_2] = size2;
+        }
     }
 
-    // two variables
+    SortVariables(query_graph_ud, univariates, est_size);
+
     for (const auto& triple_parttern : triple_partterns) {
         auto& s = triple_parttern.subject;
         auto& p = triple_parttern.predicate;
         auto& o = triple_parttern.object;
 
-        std::string vertex1;
-        std::string vertex2;
-        uint edge = 0;
-        uint size1 = 0;
-        uint size2 = 0;
-
-        if (s.IsVariable() && !p.IsVariable() && o.IsVariable()) {
-            vertex1 = s.value;
-            vertex2 = o.value;
-            edge = index_->Term2ID(p);
-            size1 = index_->GetSSetSize(edge);
-            size2 = index_->GetOSetSize(edge);
-        }
-        if (!s.IsVariable() && p.IsVariable() && o.IsVariable()) {
-            vertex1 = p.value;
-            vertex2 = o.value;
-            edge = index_->Term2ID(s);
-            size1 = index_->GetSPreSet(edge).size();
-            size2 = index_->GetBySSize(edge);
-        }
-        if (s.IsVariable() && p.IsVariable() && !o.IsVariable()) {
-            vertex1 = s.value;
-            vertex2 = p.value;
-            edge = index_->Term2ID(o);
-            size1 = index_->GetByOSize(edge);
-            size2 = index_->GetOPreSet(edge).size();
-        }
-
-        if (triple_parttern.variale_cnt == 2) {
-            if (edge == 0) {
-                zero_result_ = true;
-                return;
+        if (triple_parttern.variable_cnt == 3) {
+            bool s_contains = false, o_contains = false;
+            uint offset = 0;
+            for (uint i = 0; i < variable_order_.size(); i++) {
+                if (variable_order_[i].value == s.value) {
+                    s_contains = true;
+                    if (offset == 0)
+                        offset = i;
+                }
+                if (variable_order_[i].value == o.value) {
+                    o_contains = true;
+                    if (offset == 0)
+                        offset = i;
+                }
             }
-            query_graph_ud[vertex1].push_back({vertex2, edge});
-            query_graph_ud[vertex2].push_back({vertex1, edge});
-            if (est_size[vertex1] == 0 || est_size[vertex1] > size1)
-                est_size[vertex1] = size1;
-            if (est_size[vertex2] == 0 || est_size[vertex2] > size2)
-                est_size[vertex2] = size2;
+            if (s_contains && o_contains) {
+                variable_order_.insert(variable_order_.begin() + offset, p.value);
+            } else {
+                variable_order_.push_back(p.value);
+                distinct_predicate_ = false;
+                if (sparql_parser_->project_modifier().modifier_type ==
+                    SPARQLParser::ProjectModifier::Distinct) {
+                    auto& variables = sparql_parser_->ProjectVariables();
+                    if (variables.size() == 1) {
+                        if (p.value == variables[0]) {
+                            distinct_predicate_ = true;
+                        }
+                    }
+                }
+                if (s_contains && !o_contains && !distinct_predicate_)
+                    variable_order_.push_back(o.value);
+                if (!s_contains && o_contains && !distinct_predicate_)
+                    variable_order_.push_back(s.value);
+            }
         }
     }
 
-    int three_variable_triple_pattern_offset = -1;
-    for (uint i = 0; i < triple_partterns.size(); i++) {
-        auto& tp = triple_partterns[i];
-        auto& p = tp.predicate;
-
-        if (tp.subject.IsVariable() && p.IsVariable() && tp.object.IsVariable()) {
-            if (univariates.contains(p.value) || query_graph_ud.contains(p.value) ||
-                three_variable_triple_pattern_offset != -1) {
-                zero_result_ = true;
-                std::cout << "not support yet !" << std::endl;
-                return;
-            }
-            if (three_variable_triple_pattern_offset == -1)
-                three_variable_triple_pattern_offset = i;
-        }
-    }
-
-    if (query_graph_ud.size() == 0 && univariates.size() == 1 && three_variable_triple_pattern_offset == -1) {
-        variable_order_.push_back(univariates.begin()->second);
-        GenPlanTable();
-        return;
-    }
-
-    SortVariables(query_graph_ud, univariates, est_size);
-
-    if (three_variable_triple_pattern_offset != -1) {
-        auto& tp = triple_partterns[three_variable_triple_pattern_offset];
-        auto& s = tp.subject;
-        auto& o = tp.object;
-
-        if (sparql_parser_->project_modifier().modifier_type == SPARQLParser::ProjectModifier::Distinct) {
-            auto& variables = sparql_parser_->ProjectVariables();
-            if (variables.size() == 1) {
-                if (s.value == variables[0])
-                    three_variable_pattern_.distinct_position = 0;
-                if (tp.predicate.value == variables[0])
-                    three_variable_pattern_.distinct_position = 1;
-                if (o.value == variables[0])
-                    three_variable_pattern_.distinct_position = 2;
-            }
-        }
-
-        bool s_contains = false, o_contains = false;
-        three_variable_pattern_.constant_variable = std::vector<Variable*>(2);
-        for (uint i = 0; i < variable_order_.size(); i++) {
-            if (variable_order_[i].value == s.value) {
-                three_variable_pattern_.constant_variable[0] = &variable_order_[i];
-                three_variable_pattern_.retrieval_type = ThreeVariablePattern::RType::kS;
-                s_contains = true;
-            }
-            if (variable_order_[i].value == o.value) {
-                three_variable_pattern_.constant_variable[1] = &variable_order_[i];
-                three_variable_pattern_.retrieval_type = ThreeVariablePattern::RType::kO;
-                o_contains = true;
-            }
-        }
-        if (s_contains && !o_contains) {
-            three_variable_pattern_.retrieval_variables.push_back(
-                {tp.predicate.value, variable_order_.size(), SPARQLParser::Term::Positon::kPredicate});
-            three_variable_pattern_.retrieval_variables.push_back(
-                {o.value, variable_order_.size() + 1, SPARQLParser::Term::Positon::kObject});
-        }
-        if (o_contains) {
-            uint p_priority = variable_order_.size();
-            if (!s_contains) {
-                three_variable_pattern_.retrieval_variables.push_back(
-                    {s.value, variable_order_.size(), SPARQLParser::Term::Positon::kSubject});
-                p_priority += 1;
-            }
-            three_variable_pattern_.retrieval_variables.push_back(
-                {tp.predicate.value, p_priority, SPARQLParser::Term::Positon::kPredicate});
-        }
-
-        if (three_variable_pattern_.constant_variable.size() == 0) {
-            zero_result_ = true;
-            return;
-        }
-
-        if (s_contains && o_contains)
-            three_variable_pattern_.retrieval_type = ThreeVariablePattern::RType::kSO;
+    for (size_t i = 0; i < variable_order_.size(); ++i) {
+        variable_order_[i].priority = i;
+        value2variable_[variable_order_[i].value] = &variable_order_[i];
     }
 
     if (debug_) {
@@ -293,15 +255,12 @@ void PlanGenerator::SortVariables(AdjacencyList& query_graph_ud,
     if (debug_) {
         for (auto vertex_it = query_graph_ud.begin(); vertex_it != query_graph_ud.end(); vertex_it++) {
             std::cout << vertex_it->first << ": ";
-            for (auto& edge : vertex_it->second) {
+            for (auto& edge : vertex_it->second)
                 std::cout << " (" << edge.first << "," << edge.second << ") ";
-            }
             std::cout << std::endl;
         }
-
-        for (auto& pair : est_size) {
+        for (auto& pair : est_size)
             std::cout << pair.first << ": " << pair.second << std::endl;
-        }
     }
 
     // 作为第一个变量的优先级
@@ -322,9 +281,8 @@ void PlanGenerator::SortVariables(AdjacencyList& query_graph_ud,
 
     if (debug_) {
         std::cout << "------------------------------" << std::endl;
-        for (auto& v : variable_priority) {
+        for (auto& v : variable_priority)
             std::cout << v << ": " << est_size[v] << std::endl;
-        }
     }
 
     std::vector<std::deque<std::string>> all_paths;
@@ -341,9 +299,8 @@ void PlanGenerator::SortVariables(AdjacencyList& query_graph_ud,
                     }
                 }
             }
-            if (all_paths.size() == 0 || path.size() > all_paths[longest_path].size()) {
+            if (all_paths.size() == 0 || path.size() > all_paths[longest_path].size())
                 longest_path = all_paths.size();
-            }
             all_paths.push_back(path);
         }
     }
@@ -393,6 +350,7 @@ void PlanGenerator::SortVariables(AdjacencyList& query_graph_ud,
     for (auto& v : ends)
         variable_order_.push_back(v);
 
+    std::vector<std::string> univariates_order;
     for (auto it = univariates.begin(); it != univariates.end(); it++) {
         bool contains = false;
         for (auto& v : variable_order_) {
@@ -400,15 +358,16 @@ void PlanGenerator::SortVariables(AdjacencyList& query_graph_ud,
                 contains = true;
         }
         if (!contains)
-            variable_order_.push_back(it->first);
+            univariates_order.push_back(it->first);
     }
+    std::sort(univariates_order.begin(), univariates_order.end(),
+              [&](const auto& var1, const auto& var2) { return est_size[var1] < est_size[var2]; });
+    for (auto it = univariates_order.begin(); it != univariates_order.end(); it++)
+        variable_order_.push_back(*it);
 }
 
 void PlanGenerator::GenPlanTable() {
-    for (size_t i = 0; i < variable_order_.size(); ++i) {
-        variable_order_[i].priority = i;
-        value2variable_[variable_order_[i].value] = &variable_order_[i];
-    }
+    const std::vector<SPARQLParser::TriplePattern>& triple_partterns = sparql_parser_->TriplePatterns();
 
     size_t n = variable_order_.size();
     query_plan_.resize(n);
@@ -417,7 +376,7 @@ void PlanGenerator::GenPlanTable() {
     empty_item_indices_.resize(n);
 
     uint triple_pattern_id = 0;
-    for (const auto& triple_parttern : sparql_parser_->TriplePatterns()) {
+    for (const auto& triple_parttern : triple_partterns) {
         auto& s = triple_parttern.subject;
         auto& p = triple_parttern.predicate;
         auto& o = triple_parttern.object;
@@ -451,9 +410,9 @@ void PlanGenerator::GenPlanTable() {
             pre_results_[o_var_id].push_back(r);
         }
 
-        if (triple_parttern.variale_cnt == 2) {
+        if (triple_parttern.variable_cnt == 2) {
             Item filled_item, empty_item;
-            uint first_id, second_id;
+            uint first_priority, second_priority;
             bool is_first_prior = false;
 
             auto process_filled_item = [&](const Term& fixed_term, const Term& var_term1,
@@ -464,10 +423,10 @@ void PlanGenerator::GenPlanTable() {
                 value2variable_[var_term1.value]->position = var1_position;
                 value2variable_[var_term2.value]->position = var2_position;
 
-                first_id = value2variable_[var_term1.value]->priority;
-                second_id = value2variable_[var_term2.value]->priority;
+                first_priority = value2variable_[var_term1.value]->priority;
+                second_priority = value2variable_[var_term2.value]->priority;
 
-                is_first_prior = first_id < second_id;
+                is_first_prior = first_priority < second_priority;
 
                 filled_item.search_id = index_->Term2ID(fixed_term);
                 filled_item.prestore_type = is_first_prior ? prestore_type1 : prestore_type2;
@@ -478,23 +437,23 @@ void PlanGenerator::GenPlanTable() {
 
             if (!s.IsVariable() && p.IsVariable() && o.IsVariable()) {
                 process_filled_item(s, p, o, Positon::kPredicate, Positon::kObject, PType::kPredicate,
-                                    PType::kObject, RType::kSP, RType::kSO, &IndexRetriever::GetSPreSet,
-                                    &IndexRetriever::GetByS);
+                                    PType::kObject, RType::kGetBySP, RType::kGetBySO,
+                                    &IndexRetriever::GetSPreSet, &IndexRetriever::GetByS);
             } else if (s.IsVariable() && !p.IsVariable() && o.IsVariable()) {
                 process_filled_item(p, s, o, Positon::kSubject, Positon::kObject, PType::kPreSub,
-                                    PType::kPreObj, RType::kSP, RType::kOP, &IndexRetriever::GetSSet,
-                                    &IndexRetriever::GetOSet);
+                                    PType::kPreObj, RType::kGetBySP, RType::kGetByOP,
+                                    &IndexRetriever::GetSSet, &IndexRetriever::GetOSet);
             } else if (s.IsVariable() && p.IsVariable() && !o.IsVariable()) {
                 process_filled_item(o, s, p, Positon::kSubject, Positon::kPredicate, PType::kSubject,
-                                    PType::kPredicate, RType::kSO, RType::kOP, &IndexRetriever::GetByO,
-                                    &IndexRetriever::GetOPreSet);
+                                    PType::kPredicate, RType::kGetBySO, RType::kGetByOP,
+                                    &IndexRetriever::GetByO, &IndexRetriever::GetOPreSet);
             }
 
-            uint higher_priority_id = is_first_prior ? first_id : second_id;
-            uint lower_priority_id = is_first_prior ? second_id : first_id;
+            uint higher_priority = is_first_prior ? first_priority : second_priority;
+            uint lower_priority = is_first_prior ? second_priority : first_priority;
 
             filled_item.triple_pattern_id = triple_pattern_id;
-            filled_item.empty_item_level = lower_priority_id;
+            filled_item.empty_item_level = lower_priority;
 
             empty_item.search_id = filled_item.search_id;
             empty_item.prestore_type = Item::PType::kEmpty;
@@ -503,10 +462,66 @@ void PlanGenerator::GenPlanTable() {
             empty_item.triple_pattern_id = triple_pattern_id;
             empty_item.empty_item_level = 0;
 
-            query_plan_[higher_priority_id].push_back(filled_item);
-            filled_item_indices_[higher_priority_id].push_back(query_plan_[higher_priority_id].size() - 1);
-            query_plan_[lower_priority_id].push_back(empty_item);
-            empty_item_indices_[lower_priority_id].push_back(query_plan_[lower_priority_id].size() - 1);
+            query_plan_[higher_priority].push_back(filled_item);
+            filled_item_indices_[higher_priority].push_back(query_plan_[higher_priority].size() - 1);
+            query_plan_[lower_priority].push_back(empty_item);
+            empty_item_indices_[lower_priority].push_back(query_plan_[lower_priority].size() - 1);
+        }
+
+        if (triple_parttern.variable_cnt == 3) {
+            value2variable_[s.value]->position = Term::Positon::kSubject;
+            value2variable_[p.value]->position = Term::Positon::kPredicate;
+            std::vector<std::pair<Positon, uint>> pattern_variable_order = {
+                {Positon::kSubject, value2variable_[s.value]->priority},
+                {Positon::kPredicate, value2variable_[p.value]->priority}};
+            if (!distinct_predicate_) {
+                value2variable_[o.value]->position = Term::Positon::kObject;
+                pattern_variable_order.push_back({Positon::kObject, value2variable_[o.value]->priority});
+            }
+
+            std::sort(pattern_variable_order.begin(), pattern_variable_order.end(),
+                      [&](const auto& var1, const auto& var2) { return var1.second < var2.second; });
+
+            uint max = (distinct_predicate_) ? 2 : 3;
+            for (uint i = 0; i < max; i++) {
+                Item empty_item;
+                if (i == 0) {
+                    if (pattern_variable_order[0].first == Positon::kSubject &&
+                        pattern_variable_order[1].first == Positon::kPredicate) {
+                        empty_item.retrieval_type = Item::RType::kGetSPreSet;
+                    }
+                    if (pattern_variable_order[0].first == Positon::kObject &&
+                        pattern_variable_order[1].first == Positon::kPredicate) {
+                        empty_item.retrieval_type = Item::RType::kGetOPreSet;
+                    }
+                    empty_item.empty_item_level = pattern_variable_order[1].second;
+                }
+                if (i == 1) {
+                    if (pattern_variable_order[1].first == Positon::kPredicate &&
+                        pattern_variable_order[2].first == Positon::kObject) {
+                        empty_item.retrieval_type = Item::RType::kGetBySP;
+                    }
+                    if (pattern_variable_order[1].first == Positon::kPredicate &&
+                        pattern_variable_order[2].first == Positon::kSubject) {
+                        empty_item.retrieval_type = Item::RType::kGetByOP;
+                    }
+                    empty_item.father_item_id = pattern_variable_order[0].second;
+                    empty_item.empty_item_level =
+                        (distinct_predicate_) ? 0 : pattern_variable_order[2].second;
+                }
+                if (i == 2) {
+                    empty_item.retrieval_type = Item::RType::kNone;
+                    empty_item.empty_item_level = 0;
+                }
+
+                empty_item.search_id = 0;
+                empty_item.prestore_type = Item::PType::kEmpty;
+                empty_item.index_result = std::span<uint>();
+                empty_item.triple_pattern_id = triple_pattern_id;
+                uint level = pattern_variable_order[i].second;
+                query_plan_[level].push_back(empty_item);
+                empty_item_indices_[level].push_back(query_plan_[level].size() - 1);
+            }
         }
         triple_pattern_id++;
     }
@@ -516,19 +531,8 @@ std::vector<PlanGenerator::Variable> PlanGenerator::MappingVariable(
     const std::vector<std::string>& variables) {
     std::vector<Variable> ret;
     ret.reserve(variables.size());
-    for (const auto& var : variables) {
-        bool find = false;
-        for (uint i = 0; i < three_variable_pattern_.retrieval_variables.size(); i++) {
-            if (three_variable_pattern_.retrieval_variables[i].value == var) {
-                ret.push_back(three_variable_pattern_.retrieval_variables[i]);
-                find = true;
-                break;
-            }
-        }
-        if (!find)
-            ret.push_back(*value2variable_.at(var));
-    }
-
+    for (const auto& var : variables)
+        ret.push_back(*value2variable_.at(var));
     return ret;
 }
 
@@ -552,10 +556,10 @@ std::vector<std::vector<std::span<uint>>>& PlanGenerator::pre_results() {
     return pre_results_;
 }
 
-PlanGenerator::ThreeVariablePattern& PlanGenerator::three_variable_pattern() {
-    return three_variable_pattern_;
-}
-
 bool PlanGenerator::zero_result() {
     return zero_result_;
+}
+
+bool PlanGenerator::distinct_predicate() {
+    return distinct_predicate_;
 }

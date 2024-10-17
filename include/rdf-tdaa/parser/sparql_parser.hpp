@@ -48,7 +48,7 @@ class SPARQLParser {
         Term predicate;
         Term object;
         bool is_option;
-        uint variale_cnt;
+        uint variable_cnt;
 
         TriplePattern(Term subject, Term predicate, Term object, bool is_option, uint variale_cnt);
 

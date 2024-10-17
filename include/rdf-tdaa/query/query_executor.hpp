@@ -8,8 +8,8 @@
 #include "rdf-tdaa/query/plan_generator.hpp"
 
 class QueryExecutor {
-    using Ptype = PlanGenerator::Item::PType;
-    using Rtype = PlanGenerator::Item::RType;
+    using PType = PlanGenerator::Item::PType;
+    using RType = PlanGenerator::Item::RType;
 
     struct Stat {
         bool at_end;
@@ -33,7 +33,6 @@ class QueryExecutor {
     std::vector<std::vector<uint>>& filled_item_indices_;
     std::vector<std::vector<uint>>& empty_item_indices_;
     std::vector<std::vector<std::span<uint>>>& pre_results_;
-    PlanGenerator::ThreeVariablePattern three_variable_pattern_;
     std::vector<std::span<uint>> pre_join_;
     uint limit_;
     uint shared_cnt_;
@@ -64,9 +63,6 @@ class QueryExecutor {
                   uint shared_cnt);
 
     void Query();
-
-    void HandleThreeVariablePattern(SPARQLParser::ProjectModifier modifier,
-                                    const std::vector<std::string>& project_variables);
 
     double query_duration();
 

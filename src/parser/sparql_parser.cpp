@@ -29,14 +29,14 @@ SPARQLParser::TriplePattern::TriplePattern(Term subj, Term pred, Term obj, bool 
       predicate(std::move(pred)),
       object(std::move(obj)),
       is_option(is_option),
-      variale_cnt(variale_cnt) {}
+      variable_cnt(variale_cnt) {}
 
 SPARQLParser::TriplePattern::TriplePattern(Term subj, Term pred, Term obj)
     : subject(std::move(subj)),
       predicate(std::move(pred)),
       object(std::move(obj)),
       is_option(false),
-      variale_cnt(0) {}
+      variable_cnt(0) {}
 
 SPARQLParser::ProjectModifier::ProjectModifier(Type modifierType) : modifier_type(modifierType) {}
 

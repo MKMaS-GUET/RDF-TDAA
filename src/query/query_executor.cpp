@@ -44,7 +44,6 @@ QueryExecutor::QueryExecutor(std::shared_ptr<IndexRetriever> index,
       filled_item_indices_(plan->filled_item_indices()),
       empty_item_indices_(plan->empty_item_indices()),
       pre_results_(plan->pre_results()),
-      three_variable_pattern_(plan->three_variable_pattern()),
       limit_(limit),
       shared_cnt_(shared_cnt) {}
 
@@ -59,10 +58,9 @@ std::span<uint> QueryExecutor::LeapfrogJoin(JoinList& lists) {
     std::vector<uint>* result_set = new std::vector<uint>();
 
     if (lists.Size() == 1) {
-        std::vector<uint>* result = new std::vector<uint>;
         for (uint i = 0; i < lists.GetRangeByIndex(0).size(); i++)
-            result->push_back(lists.GetRangeByIndex(0)[i]);
-        return std::span<uint>(result->begin(), result->size());
+            result_set->push_back(lists.GetRangeByIndex(0)[i]);
+        return std::span<uint>(result_set->begin(), result_set->size());
     }
 
     // Check if any index is empty => Intersection empty
@@ -125,7 +123,7 @@ bool QueryExecutor::PreJoin() {
             join_list.AddVectors(pre_results_[level]);
 
         for (long unsigned int i = 0; i < stat_.plan[level].size(); i++) {
-            if (stat_.plan[level][i].prestore_type != PlanGenerator::Item::PType::kEmpty)
+            if (stat_.plan[level][i].index_result.size() != 0)
                 join_list.AddVector(stat_.plan[level][i].index_result);
         }
         if (join_list.Size() > 1) {
@@ -151,9 +149,8 @@ void QueryExecutor::Down(Stat& stat) {
     // 遍历当前 level_ 所有经过连接的得到的结果实体
     // 并将这些实体添加到存储结果的 current_tuple_ 中
     bool success = UpdateCurrentTuple(stat);
-    while (!success && !stat.at_end) {
+    while (!success && !stat.at_end)
         success = UpdateCurrentTuple(stat);
-    }
 }
 
 void QueryExecutor::Up(Stat& stat) {
@@ -168,9 +165,8 @@ void QueryExecutor::Next(Stat& stat) {
     // 当前 level_ 的下一个 candidate_value_
     stat.at_end = false;
     bool success = UpdateCurrentTuple(stat);
-    while (!success && !stat.at_end) {
+    while (!success && !stat.at_end)
         success = UpdateCurrentTuple(stat);
-    }
 }
 
 void QueryExecutor::GenCondidateValue(Stat& stat) {
@@ -181,9 +177,10 @@ void QueryExecutor::GenCondidateValue(Stat& stat) {
     bool has_filled_item = filled_item_indices_[stat.level].size();
 
     join_list.AddVectors(pre_results_[stat.level]);
-
-    for (const auto& idx : empty_item_indices_[stat.level])
-        join_list.AddVector(stat.plan[stat.level][idx].index_result);
+    for (const auto& idx : empty_item_indices_[stat.level]) {
+        if (stat.plan[stat.level][idx].index_result.size() != 0)
+            join_list.AddVector(stat.plan[stat.level][idx].index_result);
+    }
 
     if ((!has_unariate_result && !has_empty_item_ && has_filled_item) ||
         (has_unariate_result && !has_empty_item_ && has_filled_item)) {
@@ -218,25 +215,15 @@ void QueryExecutor::GenCondidateValue(Stat& stat) {
 }
 
 bool QueryExecutor::UpdateCurrentTuple(Stat& stat) {
-    // stat.indices_ 用于更新已经处理过的交集结果在结果列表中的 id
     size_t idx = stat.candidate_indices[stat.level];
 
     if (idx < stat.candidate_value[stat.level].size()) {
-        // candidate_value_ 是每一个 level_ 交集的计算结果，
-        // entity 是第 idx 个结果
         uint value = stat.candidate_value[stat.level][idx];
-
-        // 如果当前层没有 filled_item，就说明不需要填充 filled_item 对应的 empty_item
-        // 否则就要调用 FillEmptyItem 进行填充
-        if (filled_item_indices_[stat.level].empty() || FillEmptyItem(stat, value)) {
+        stat.candidate_indices[stat.level]++;
+        if (FillEmptyItem(stat, value)) {
             stat.current_tuple[stat.level] = value;
-            stat.candidate_indices[stat.level]++;
             return true;
         }
-
-        // 如果当前层存在 filled_item，并且当前的 value 无法填充 empty_item
-        // 则说明 value 并不是查询结果中的一个，跳过
-        stat.candidate_indices[stat.level]++;
     } else {
         stat.at_end = true;
     }
@@ -248,40 +235,60 @@ bool QueryExecutor::FillEmptyItem(Stat& stat, uint value) {
     bool match = true;
     // 遍历一个变量（level_）的在所有三元组中的查询结果
     for (auto& item : stat.plan[stat.level]) {
-        for (auto& empty_item : stat.plan[item.empty_item_level]) {
-            // 确保 search_id 相同，即在一个三元组中
-            if (empty_item.triple_pattern_id != item.triple_pattern_id)
-                continue;
+        if (item.empty_item_level != 0) {
+            for (auto& empty_item : stat.plan[item.empty_item_level]) {
+                // 确保 search_id 相同，即在一个三元组中
+                if (empty_item.triple_pattern_id != item.triple_pattern_id)
+                    continue;
 
-            uint id = item.search_id;
-            std::span<uint> r;
+                uint id = item.search_id;
+                std::span<uint> r;
 
-            if (item.retrieval_type == Rtype::kSO) {
-                if (item.prestore_type == Ptype::kObject)
-                    empty_item.index_result = index_->GetBySO(id, value);
-                else if (item.prestore_type == Ptype::kSubject)
-                    empty_item.index_result = index_->GetBySO(value, id);
+                if (item.retrieval_type == RType::kGetBySO) {
+                    if (item.prestore_type == PType::kObject)
+                        empty_item.index_result = index_->GetBySO(id, value);
+                    if (item.prestore_type == PType::kSubject)
+                        empty_item.index_result = index_->GetBySO(value, id);
+                }
+                if (item.retrieval_type == RType::kGetBySP) {
+                    if (item.prestore_type == PType::kPreSub)
+                        r = index_->GetBySP(value, id);
+                    if (item.prestore_type == PType::kPredicate)
+                        r = index_->GetBySP(id, value);
+                    if (item.prestore_type == PType::kEmpty) {
+                        uint subject = stat.candidate_value[item.father_item_id]
+                                                           [stat.candidate_indices[item.father_item_id] - 1];
+                        r = index_->GetBySP(subject, value);
+                    }
+
+                    empty_item.index_result = r;
+                }
+                if (item.retrieval_type == RType::kGetByOP) {
+                    if (item.prestore_type == PType::kPreObj)
+                        r = index_->GetByOP(value, id);
+                    if (item.prestore_type == PType::kPredicate)
+                        r = index_->GetByOP(id, value);
+                    if (item.prestore_type == PType::kEmpty) {
+                        uint object = stat.candidate_value[item.father_item_id]
+                                                          [stat.candidate_indices[item.father_item_id] - 1];
+                        r = index_->GetByOP(object, value);
+                    }
+                    empty_item.index_result = r;
+                }
+                if (item.retrieval_type == RType::kGetSPreSet) {
+                    empty_item.index_result = index_->GetSPreSet(value);
+                }
+                if (item.retrieval_type == RType::kGetOPreSet)
+                    empty_item.index_result = index_->GetOPreSet(value);
+                if (item.retrieval_type == RType::kGetSSet)
+                    empty_item.index_result = index_->GetSSet(value);
+                if (item.retrieval_type == RType::kGetOSet)
+                    empty_item.index_result = index_->GetOSet(value);
+
+                if (empty_item.index_result.size() == 0)
+                    match = false;
+                break;
             }
-
-            if (item.retrieval_type == Rtype::kSP) {
-                if (item.prestore_type == Ptype::kPredicate)
-                    r = index_->GetBySP(id, value);
-                else if (item.prestore_type == Ptype::kPreSub)
-                    r = index_->GetBySP(value, id);
-                empty_item.index_result = r;
-            }
-
-            if (item.retrieval_type == Rtype::kOP) {
-                if (item.prestore_type == Ptype::kPreObj)
-                    r = index_->GetByOP(value, id);
-                else if (item.prestore_type == Ptype::kPredicate)
-                    r = index_->GetByOP(id, value);
-                empty_item.index_result = r;
-            }
-
-            if (empty_item.index_result.size() == 0)
-                match = false;
-            break;
         }
     }
     return match;
@@ -295,9 +302,8 @@ void QueryExecutor::Query() {
 
     for (;;) {
         if (stat_.at_end) {
-            if (stat_.level == 0) {
+            if (stat_.level == 0)
                 break;
-            }
             Up(stat_);
             Next(stat_);
         } else {
@@ -315,104 +321,6 @@ void QueryExecutor::Query() {
 
     auto end = std::chrono::high_resolution_clock::now();
     query_duration_ = end - begin;
-}
-
-void QueryExecutor::HandleThreeVariablePattern(SPARQLParser::ProjectModifier modifier,
-                                               const std::vector<std::string>& project_variables) {
-    std::shared_ptr<std::vector<std::vector<uint>>> new_result =
-        std::make_shared<std::vector<std::vector<uint>>>();
-
-    new_result->reserve(stat_.result->size() * 2);
-    phmap::flat_hash_set<uint> distinct_result;
-    uint distinct_position = 0;
-
-    uint result_tuple_size = stat_.result->at(0).size();
-    uint new_result_tuple_size = result_tuple_size;
-
-    if (three_variable_pattern_.retrieval_type == PlanGenerator::ThreeVariablePattern::kS) {
-        new_result_tuple_size += 2;
-        for (const auto& result : *stat_.result) {
-            uint s_id = result[three_variable_pattern_.constant_variable[0]->priority];
-            std::span<uint> c_set = index_->GetSPreSet(s_id);
-            if (three_variable_pattern_.distinct_position != 1) {
-                for (auto p_id : c_set) {
-                    auto o_ids = index_->GetBySP(s_id, p_id);
-
-                    std::vector<uint> temp_result(result);
-                    temp_result.resize(result.size() + 2);
-
-                    for (auto o_id : o_ids) {
-                        temp_result[result.size()] = p_id;
-                        temp_result[result.size() + 1] = o_id;
-                        new_result->push_back(temp_result);
-                    }
-                }
-            } else {
-                distinct_position = result_tuple_size;
-                for (auto p_id : c_set) {
-                    distinct_result.insert(p_id);
-                }
-            }
-        }
-    }
-
-    if (three_variable_pattern_.retrieval_type == PlanGenerator::ThreeVariablePattern::kO) {
-        new_result_tuple_size += 2;
-        for (const auto& result : *stat_.result) {
-            uint o_id = result[three_variable_pattern_.constant_variable[1]->priority];
-            std::span<uint> c_set = index_->GetSPreSet(o_id);
-            if (three_variable_pattern_.distinct_position != 1) {
-                for (auto p_id : c_set) {
-                    auto s_ids = index_->GetBySP(o_id, p_id);
-
-                    std::vector<uint> temp_result(result);
-                    temp_result.resize(result.size() + 2);
-
-                    for (auto s_id : s_ids) {
-                        temp_result[result.size()] = p_id;
-                        temp_result[result.size() + 1] = s_id;
-                        new_result->push_back(temp_result);
-                    }
-                }
-            } else {
-                distinct_position = result_tuple_size + 1;
-                for (auto p_id : c_set) {
-                    distinct_result.insert(p_id);
-                }
-            }
-        }
-    }
-
-    if (three_variable_pattern_.retrieval_type == PlanGenerator::ThreeVariablePattern::kSO) {
-        new_result_tuple_size += 1;
-        for (const auto& result : *stat_.result) {
-            uint s_id = result[three_variable_pattern_.constant_variable[0]->priority];
-            uint o_id = result[three_variable_pattern_.constant_variable[1]->priority];
-            std::span<uint> p_set = index_->GetBySO(s_id, o_id);
-            if (three_variable_pattern_.distinct_position != 1) {
-                for (auto p_id : p_set) {
-                    std::vector<uint> temp_result(result);
-                    temp_result.resize(new_result_tuple_size);
-                    temp_result[result_tuple_size] = p_id;
-                    new_result->push_back(temp_result);
-                }
-            } else {
-                distinct_position = result_tuple_size;
-                for (auto p_id : p_set) {
-                    distinct_result.insert(p_id);
-                }
-            }
-        }
-    }
-
-    if (three_variable_pattern_.distinct_position == 1) {
-        for (auto it = distinct_result.begin(); it != distinct_result.end(); it++) {
-            std::vector<uint> temp_result(new_result_tuple_size);
-            temp_result[distinct_position] = *it;
-            new_result->push_back(temp_result);
-        }
-    }
-    stat_.result = new_result;
 }
 
 double QueryExecutor::query_duration() {
