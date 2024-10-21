@@ -49,7 +49,7 @@ QueryExecutor::QueryExecutor(std::shared_ptr<IndexRetriever> index,
 
 std::span<uint> QueryExecutor::LeapfrogJoin(std::vector<std::span<uint>>& lists) {
     JoinList join_list;
-    join_list.AddVectors(lists);
+    join_list.AddLists(lists);
 
     return LeapfrogJoin(join_list);
 }
@@ -58,8 +58,8 @@ std::span<uint> QueryExecutor::LeapfrogJoin(JoinList& lists) {
     std::vector<uint>* result_set = new std::vector<uint>();
 
     if (lists.Size() == 1) {
-        for (uint i = 0; i < lists.GetRangeByIndex(0).size(); i++)
-            result_set->push_back(lists.GetRangeByIndex(0)[i]);
+        for (uint i = 0; i < lists.GetListByIndex(0).size(); i++)
+            result_set->push_back(lists.GetListByIndex(0)[i]);
         return std::span<uint>(result_set->begin(), result_set->size());
     }
 
@@ -71,16 +71,15 @@ std::span<uint> QueryExecutor::LeapfrogJoin(JoinList& lists) {
     // 创建指向每一个列表的指针，初始指向列表的第一个值
 
     //  max 是所有指针指向位置的最大值，初始的最大值就是对列表排序后，最后一个列表的第一个值
-    size_t max = lists.GetCurrentValOfRange(lists.Size() - 1);
+    size_t max = lists.GetCurrentValOfList(lists.Size() - 1);
     // 当前迭代器的 id
     size_t idx = 0;
 
     uint value;
     while (true) {
         // 当前迭代器的第一个值
-        value = lists.GetCurrentValOfRange(idx);
+        value = lists.GetCurrentValOfList(idx);
 
-        // get_current_val_time += diff.count();
         // An intersecting value has been found!
         // 在没有找到交集中的值时，
         // 当前迭代器指向的值 (max) 都要 > 此迭代器之前的迭代器指向的值，
@@ -103,7 +102,7 @@ std::span<uint> QueryExecutor::LeapfrogJoin(JoinList& lists) {
         }
 
         // Store the maximum
-        max = lists.GetCurrentValOfRange(idx);
+        max = lists.GetCurrentValOfList(idx);
 
         idx++;
         idx = idx % lists.Size();
@@ -120,11 +119,11 @@ bool QueryExecutor::PreJoin() {
         if (!empty_item_indices_[level].empty())
             continue;
         if (pre_results_[level].size())
-            join_list.AddVectors(pre_results_[level]);
+            join_list.AddLists(pre_results_[level]);
 
         for (long unsigned int i = 0; i < stat_.plan[level].size(); i++) {
             if (stat_.plan[level][i].index_result.size() != 0)
-                join_list.AddVector(stat_.plan[level][i].index_result);
+                join_list.AddList(stat_.plan[level][i].index_result);
         }
         if (join_list.Size() > 1) {
             pre_join_[level] = LeapfrogJoin(join_list);
@@ -176,10 +175,10 @@ void QueryExecutor::GenCondidateValue(Stat& stat) {
     bool has_empty_item_ = empty_item_indices_[stat.level].size();
     bool has_filled_item = filled_item_indices_[stat.level].size();
 
-    join_list.AddVectors(pre_results_[stat.level]);
+    join_list.AddLists(pre_results_[stat.level]);
     for (const auto& idx : empty_item_indices_[stat.level]) {
         if (stat.plan[stat.level][idx].index_result.size() != 0)
-            join_list.AddVector(stat.plan[stat.level][idx].index_result);
+            join_list.AddList(stat.plan[stat.level][idx].index_result);
     }
 
     if ((!has_unariate_result && !has_empty_item_ && has_filled_item) ||
@@ -189,7 +188,7 @@ void QueryExecutor::GenCondidateValue(Stat& stat) {
             return;
         } else {
             for (const auto& idx : filled_item_indices_[stat.level])
-                join_list.AddVector(stat.plan[stat.level][idx].index_result);
+                join_list.AddList(stat.plan[stat.level][idx].index_result);
         }
         stat.candidate_value[stat.level] = LeapfrogJoin(join_list);
     }
@@ -197,7 +196,7 @@ void QueryExecutor::GenCondidateValue(Stat& stat) {
     if ((!has_unariate_result && has_empty_item_ && has_filled_item) ||
         (has_unariate_result && !has_empty_item_ && !has_filled_item && join_list.Size() == 1) ||
         (!has_unariate_result && has_empty_item_ && !has_filled_item && join_list.Size() == 1)) {
-        stat.candidate_value[stat.level] = join_list.GetRangeByIndex(0);
+        stat.candidate_value[stat.level] = join_list.GetListByIndex(0);
     }
 
     if ((has_unariate_result && has_empty_item_ && !has_filled_item) ||

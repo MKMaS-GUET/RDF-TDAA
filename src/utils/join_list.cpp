@@ -5,10 +5,10 @@ JoinList::JoinList() {
 }
 
 JoinList::JoinList(std::vector<std::span<uint>>& lists) {
-    AddVectors(lists);
+    AddLists(lists);
 }
 
-void JoinList::AddVector(std::span<uint>& list) {
+void JoinList::AddList(std::span<uint>& list) {
     if (list.size() == 0)
         return;
     if (lists_.size() == 0) {
@@ -27,9 +27,9 @@ void JoinList::AddVector(std::span<uint>& list) {
     lists_.push_back(list);
 }
 
-void JoinList::AddVectors(std::vector<std::span<uint>>& lists) {
+void JoinList::AddLists(std::vector<std::span<uint>>& lists) {
     for (auto it = lists.begin(); it != lists.end(); it++) {
-        AddVector(*it);
+        AddList(*it);
     }
 }
 
@@ -47,43 +47,43 @@ std::span<uint> JoinList::Shortest() {
 
 void JoinList::UpdateCurrentPostion() {
     for (long unsigned int i = 0; i < lists_.size(); i++) {
-        vector_current_pos_.push_back(lists_[i].begin());
+        list_current_pos_.push_back(lists_[i].begin());
     }
 }
 
 void JoinList::Seek(int i, uint val) {
     std::span<uint>& p_r = lists_[i];
 
-    auto it = vector_current_pos_[i];
+    auto it = list_current_pos_[i];
     auto end = p_r.end();
     for (; it < end; it = it + 2) {
         if (*it >= val) {
             if (*(it - 1) >= val) {
-                vector_current_pos_[i] = it - 1;
+                list_current_pos_[i] = it - 1;
                 return;
             }
-            vector_current_pos_[i] = it;
+            list_current_pos_[i] = it;
             return;
         }
     }
     if (it == end) {
         if (*(it - 1) >= val) {
-            vector_current_pos_[i] = it - 1;
+            list_current_pos_[i] = it - 1;
             return;
         }
     }
-    vector_current_pos_[i] = end;
+    list_current_pos_[i] = end;
 }
 
-uint JoinList::GetCurrentValOfRange(int i) {
-    return *vector_current_pos_[i];
+uint JoinList::GetCurrentValOfList(int i) {
+    return *list_current_pos_[i];
 }
 
 void JoinList::NextVal(int i) {
-    vector_current_pos_[i]++;
+    list_current_pos_[i]++;
 }
 
-std::span<uint> JoinList::GetRangeByIndex(int i) {
+std::span<uint> JoinList::GetListByIndex(int i) {
     return lists_[i];
 }
 
@@ -98,12 +98,12 @@ bool JoinList::HasEmpty() {
 
 bool JoinList::AtEnd(int i) {
     std::span<uint> p_r = lists_[i];
-    return vector_current_pos_[i] == p_r.end();
+    return list_current_pos_[i] == p_r.end();
 }
 
 void JoinList::Clear() {
     lists_.clear();
-    vector_current_pos_.clear();
+    list_current_pos_.clear();
 }
 
 int JoinList::Size() {
