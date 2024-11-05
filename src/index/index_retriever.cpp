@@ -6,17 +6,17 @@
 
 IndexRetriever::IndexRetriever() {}
 
-IndexRetriever::IndexRetriever(std::string db_name) : db_name_(db_name) {
+IndexRetriever::IndexRetriever(std::string db_name) : db_path_(db_name) {
     auto beg = std::chrono::high_resolution_clock::now();
 
-    db_dictionary_path_ = "./DB_DATA_ARCHIVE/" + db_name_ + "/dictionary/";
-    db_index_path_ = "./DB_DATA_ARCHIVE/" + db_name_ + "/index/";
+    db_dictionary_path_ = db_path_ + "/dictionary/";
+    db_index_path_ = db_path_ + "/index/";
 
     dict_ = Dictionary(db_dictionary_path_);
     max_subject_id_ = dict_.shared_cnt() + dict_.subject_cnt();
 
     predicate_index_ = PredicateIndex(db_index_path_, dict_.predicate_cnt());
-
+    
     spo_ = DAAs(db_index_path_, DAAs::Type::kSPO, predicate_index_);
     spo_.Load();
     ops_ = DAAs(db_index_path_, DAAs::Type::kOPS, predicate_index_);

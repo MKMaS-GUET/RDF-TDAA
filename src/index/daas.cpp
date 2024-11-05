@@ -20,10 +20,10 @@ uint One::Next() {
     return end_;
 }
 
-// ones in [begin, end)
+// ones in [begin, end]
 uint range_rank(MMap<char>& bits, uint begin, uint end) {
     uint cnt = 0;
-    for (uint bit_offset = begin; bit_offset < end; bit_offset++) {
+    for (uint bit_offset = begin; bit_offset <= end; bit_offset++) {
         if (bits[bit_offset / 8] != 0) {
             if (bits[bit_offset / 8] & 1 << (7 - bit_offset % 8))
                 cnt++;

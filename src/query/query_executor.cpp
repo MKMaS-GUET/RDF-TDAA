@@ -104,8 +104,7 @@ std::span<uint> QueryExecutor::LeapfrogJoin(JoinList& lists) {
         // Store the maximum
         max = lists.GetCurrentValOfList(idx);
 
-        idx++;
-        idx = idx % lists.Size();
+        idx = (idx + 1) % lists.Size();
     }
 
     return std::span<uint>(result_set->begin(), result_set->size());

@@ -11,7 +11,7 @@ void ArgsParser::Build(const std::unordered_map<std::string, std::string>& args)
                   << std::endl;
         exit(1);
     }
-    arguments_[arg_name_] = args.count("-d") ? args.at("-d") : args.at("--database");
+    arguments_[arg_db_path_] = args.count("-d") ? args.at("-d") : args.at("--database");
     arguments_[arg_file_] = args.count("-f") ? args.at("-f") : args.at("--file");
 }
 
@@ -21,13 +21,8 @@ void ArgsParser::Query(const std::unordered_map<std::string, std::string>& args)
         exit(1);
     }
 
-    // if (!args.count("-d") && !args.count("--database")) {
-    //     std::cerr << "usage: epei query [-d DATABASE]" << std::endl;
-    //     std::cerr << "epei: error: the following argument is required: [-d DATABASE]" << std::endl;
-    //     exit(1);
-    // }
     if (args.count("-d"))
-        arguments_[arg_name_] = args.count("-d") ? args.at("-d") : args.at("--database");
+        arguments_[arg_db_path_] = args.count("-d") ? args.at("-d") : args.at("--database");
     if (args.count("-f"))
         arguments_[arg_file_] = args.at("-f");
     else if (args.count("--file"))
@@ -47,14 +42,15 @@ void ArgsParser::Server(const std::unordered_map<std::string, std::string>& args
         std::cout << help_info_ << std::endl;
         exit(1);
     }
-    if ((!args.count("-p") && !args.count("--port")) || !args.count("--ip")) {
+    if ((!args.count("-p") && !args.count("--port"))) {
         std::cerr << "usage: epei server [--ip IP] [-p PORT]" << std::endl;
-        std::cerr << "epei: error: the following arguments are required: [--ip IP] [-p PORT]" << std::endl;
+        std::cerr << "epei: error: the following arguments are required: [-p PORT]" << std::endl;
         exit(1);
     }
     if (args.count("-d"))
-        arguments_[arg_name_] = args.count("-d") ? args.at("-d") : args.at("--database");
-    arguments_[arg_ip_] = args.at("--ip");
+        arguments_[arg_db_path_] = args.count("-d") ? args.at("-d") : args.at("--database");
+    if (args.count("--ip"))
+        arguments_[arg_ip_] = args.at("--ip");
     arguments_[arg_port_] = args.count("-p") ? args.at("-p") : args.at("--port");
     if (!IsNumber(arguments_[arg_port_])) {
         std::cerr << "epei: error: the argument [-p PORT] requires a number, but got "

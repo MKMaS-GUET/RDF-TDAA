@@ -18,7 +18,7 @@ class ArgsParser {
         kServer,
     };
 
-    const std::string arg_name_ = "name";
+    const std::string arg_db_path_ = "path";
     const std::string arg_file_ = "file";
     const std::string arg_ip_ = "ip";
     const std::string arg_port_ = "port";
@@ -57,7 +57,7 @@ class ArgsParser {
         "    Usage: rdftdaa build [OPTIONS]\n"
         "\n"
         "    Options:\n"
-        "      -d, --database <NAME>   Specify the name of the database.\n"
+        "      -d, --database <PATH>   Specify the path of the database.\n"
         "      -f, --file <FILE>       Specify the input file to build the database.\n"
         "\n"
         "  query\n"
@@ -66,7 +66,7 @@ class ArgsParser {
         "    Usage: rdftdaa query [OPTIONS]\n"
         "\n"
         "    Options:\n"
-        "      -d, --database <NAME>   Specify the name of the database.\n"
+        "      -d, --database <PATH>   Specify the path of the database.\n"
         "      -f, --file <FILE>       Specify the file containing the query.\n"
         "\n"
         "  server\n"

@@ -13,7 +13,7 @@
 #include "rdf-tdaa/index/predicate_index.hpp"
 
 class IndexRetriever {
-    std::string db_name_;
+    std::string db_path_;
     std::string db_dictionary_path_;
     std::string db_index_path_;
 

@@ -102,9 +102,10 @@ void RDFTDAA::Create(const std::string& db_name, const std::string& data_file) {
     std::cout << "create " << db_name << " takes " << diff.count() << " ms." << std::endl;
 }
 
-void RDFTDAA::Query(const std::string& db_name, const std::string& data_file) {
-    if (db_name != "" and data_file != "") {
-        std::shared_ptr<IndexRetriever> index = std::make_shared<IndexRetriever>(db_name);
+void RDFTDAA::Query(const std::string& db_path, const std::string& data_file) {
+    if (db_path != "" and data_file != "") {
+
+        std::shared_ptr<IndexRetriever> index = std::make_shared<IndexRetriever>(db_path);
         std::ifstream in(data_file, std::ifstream::in);
         std::vector<std::string> sparqls;
         if (in.is_open()) {

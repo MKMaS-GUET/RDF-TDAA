@@ -287,7 +287,6 @@ void PlanGenerator::SortVariables(AdjacencyList& query_graph_ud,
 
     std::vector<std::deque<std::string>> all_paths;
     std::vector<std::deque<std::string>> partial_paths;
-    uint longest_path = 0;
     while (variable_priority.size() > 0) {
         partial_paths = FindAllPathsInGraph(query_graph_ud, variable_priority[0]);
         for (auto& path : partial_paths) {
@@ -299,14 +298,12 @@ void PlanGenerator::SortVariables(AdjacencyList& query_graph_ud,
                     }
                 }
             }
-            if (all_paths.size() == 0 || path.size() > all_paths[longest_path].size())
-                longest_path = all_paths.size();
             all_paths.push_back(path);
         }
     }
 
     if (debug_) {
-        std::cout << "longest_path: " << longest_path << std::endl;
+        std::cout << "pathes: " << std::endl;
         for (auto& path : all_paths) {
             for (auto it = path.begin(); it != path.end(); it++)
                 std::cout << *it << " ";

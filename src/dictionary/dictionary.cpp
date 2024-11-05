@@ -35,6 +35,9 @@ Dictionary::Dictionary(std::string& dict_path) : dict_path_(dict_path) {
     object_cnt_ = menagement_data[2];
     shared_cnt_ = menagement_data[3];
 
+    std::cout << subject_cnt_ + object_cnt_ + shared_cnt_ << std::endl;
+    std::cout << predicate_cnt_ << std::endl;
+
     id2predicate_ = std::vector<std::string>(predicate_cnt_ + 1);
     LoadPredicate(id2predicate_, predicate2id_);
 
