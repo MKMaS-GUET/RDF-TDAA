@@ -83,15 +83,23 @@ void JoinList::NextVal(int i) {
     list_current_pos_[i]++;
 }
 
+std::span<uint> JoinList::GetShortest() {
+    uint idx = 0;
+    for (long unsigned int i = 0; i < lists_.size(); i++) {
+        if (lists_[i].size() < lists_[idx].size())
+            idx = i;
+    }
+    return lists_[idx];
+}
+
 std::span<uint> JoinList::GetListByIndex(int i) {
     return lists_[i];
 }
 
 bool JoinList::HasEmpty() {
     for (long unsigned int i = 0; i < lists_.size(); i++) {
-        if (lists_[i].size() == 0) {
+        if (lists_[i].size() == 0)
             return true;
-        }
     }
     return false;
 }

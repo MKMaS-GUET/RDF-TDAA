@@ -35,6 +35,8 @@ class JoinList {
     // 更新range的起始迭代器
     void NextVal(int i);
 
+    std::span<uint> GetShortest();
+
     std::span<uint> GetListByIndex(int i);
 
     bool HasEmpty();
