@@ -36,6 +36,8 @@ Download the RDF data and queries that we want to use:
 - 1 [Watdiv100M](https://mega.nz/folder/4r1iRCZZ#JKCi9mCCMKOaXadr73kDdQ)
 - 2 [Wikidata](https://mega.nz/folder/5vUBHKTQ#TwpzwSzWhzniK1CeykxUCw)
 
+Our RDF engines benchmark is available [here](https://github.com/liuyipeng42/rdf_engines_benchmark)
+
 ## How to use
 
 ```
