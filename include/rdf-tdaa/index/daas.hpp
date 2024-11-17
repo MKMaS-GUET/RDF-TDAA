@@ -73,11 +73,9 @@ class DAAs {
     uint EraseAndStatistic(std::vector<uint>& c_set_id,
                            std::vector<std::vector<std::vector<uint>>>& entity_set);
 
-    void BuildDAAs(std::vector<std::vector<std::vector<uint>>>& entity_set,
-                   std::vector<uint>& daa_offsets,
-                   uint all_arr_size);
+    void BuildDAAs(std::vector<std::vector<std::vector<uint>>>& entity_set, std::vector<ulong>& daa_offsets);
 
-    void BuildToDAA(std::vector<uint>& c_set_id, std::vector<uint>& daa_offsets);
+    void BuildToDAA(std::vector<uint>& c_set_id, std::vector<ulong>& daa_offsets);
 
    public:
     DAAs();

@@ -138,20 +138,29 @@ uint DAAs::EraseAndStatistic(std::vector<uint>& c_set_id,
 }
 
 void DAAs::BuildDAAs(std::vector<std::vector<std::vector<uint>>>& entity_set,
-                     std::vector<uint>& daa_offsets,
-                     uint all_arr_size) {
+                     std::vector<ulong>& daa_offsets) {
     std::string prefix = (type_ == DAAs::Type::kSPO) ? "spo" : "ops";
     ulong entity_cnt = entity_set.size();
 
+    uint one_cnt = 0;
+    uint levels_size = 0;
+    for (uint id = 1; id <= entity_cnt; id++) {
+        if (entity_set[id - 1].size() != 1 || entity_set[id - 1][0].size() != 1) {
+            for (uint p = 0; p < entity_set[id - 1].size(); p++)
+                levels_size += entity_set[id - 1][p].size();
+        } else
+            one_cnt++;
+    }
+
     ulong file_size;
     if (compress_levels_)
-        file_size = ulong(all_arr_size * ulong(daa_levels_width_) + 7ul) / 8ul;
+        file_size = ulong(levels_size * ulong(daa_levels_width_) + 7ul) / 8ul;
     else
-        file_size = all_arr_size * 4;
+        file_size = levels_size * 4;
 
     daa_levels_ = MMap<uint>(file_path_ + prefix + "_daa_levels", file_size);
-    daa_level_end_ = MMap<char>(file_path_ + prefix + "_daa_level_end", ulong(all_arr_size + 7ul) / 8ul);
-    daa_array_end_ = MMap<char>(file_path_ + prefix + "_daa_array_end", ulong(all_arr_size + 7ul) / 8ul);
+    daa_level_end_ = MMap<char>(file_path_ + prefix + "_daa_level_end", ulong(levels_size + 7ul) / 8ul);
+    daa_array_end_ = MMap<char>(file_path_ + prefix + "_daa_array_end", ulong(levels_size + 7ul) / 8ul);
 
     uint daa_file_offset = 0;
 
@@ -161,42 +170,46 @@ void DAAs::BuildDAAs(std::vector<std::vector<std::vector<uint>>>& entity_set,
     uint levels_buffer = 0;
     uint levels_buffer_offset = 31;
 
-    daa_offsets = std::vector<uint>(entity_cnt);
+    daa_offsets = std::vector<ulong>(entity_cnt, 0);
 
     for (uint id = 1; id <= entity_cnt; id++) {
-        DAAs::DAA daa = DAAs::DAA(entity_set[id - 1]);
+        if (entity_set[id - 1].size() != 1 || entity_set[id - 1][0].size() != 1) {
+            DAAs::DAA daa = DAAs::DAA(entity_set[id - 1]);
 
-        daa_file_offset += daa.data_cnt;
-        daa_offsets[id - 1] = daa_file_offset;
+            daa_file_offset += daa.data_cnt;
+            daa_offsets[id - 1] = daa_file_offset;
 
-        for (uint levels_offset = 0; levels_offset < daa.data_cnt; levels_offset++) {
-            if (compress_levels_) {
-                for (uint i = 0; i < daa_levels_width_; i++) {
-                    if (daa.levels[levels_offset] & (1 << (daa_levels_width_ - 1 - i)))
-                        levels_buffer |= 1 << levels_buffer_offset;
-                    if (levels_buffer_offset == 0) {
-                        daa_levels_.Write(levels_buffer);
-                        levels_buffer = 0;
-                        levels_buffer_offset = 32;
+            for (uint levels_offset = 0; levels_offset < daa.data_cnt; levels_offset++) {
+                if (compress_levels_) {
+                    for (uint i = 0; i < daa_levels_width_; i++) {
+                        if (daa.levels[levels_offset] & (1 << (daa_levels_width_ - 1 - i)))
+                            levels_buffer |= 1 << levels_buffer_offset;
+                        if (levels_buffer_offset == 0) {
+                            daa_levels_.Write(levels_buffer);
+                            levels_buffer = 0;
+                            levels_buffer_offset = 32;
+                        }
+                        levels_buffer_offset--;
                     }
-                    levels_buffer_offset--;
+                } else {
+                    daa_levels_.Write(daa.levels[levels_offset]);
                 }
-            } else {
-                daa_levels_.Write(daa.levels[levels_offset]);
-            }
 
-            if (daa.level_end[levels_offset / 8] & (1 << (7 - levels_offset % 8)))
-                level_end_buffer |= 1 << end_buffer_offset;
-            if (daa.array_end[levels_offset / 8] & (1 << (7 - levels_offset % 8)))
-                array_end_buffer |= 1 << end_buffer_offset;
-            if (end_buffer_offset == 0) {
-                daa_level_end_.Write(level_end_buffer);
-                daa_array_end_.Write(array_end_buffer);
-                level_end_buffer = 0;
-                array_end_buffer = 0;
-                end_buffer_offset = 8;
+                if (daa.level_end[levels_offset / 8] & (1 << (7 - levels_offset % 8)))
+                    level_end_buffer |= 1 << end_buffer_offset;
+                if (daa.array_end[levels_offset / 8] & (1 << (7 - levels_offset % 8)))
+                    array_end_buffer |= 1 << end_buffer_offset;
+                if (end_buffer_offset == 0) {
+                    daa_level_end_.Write(level_end_buffer);
+                    daa_array_end_.Write(array_end_buffer);
+                    level_end_buffer = 0;
+                    array_end_buffer = 0;
+                    end_buffer_offset = 8;
+                }
+                end_buffer_offset--;
             }
-            end_buffer_offset--;
+        } else {
+            daa_offsets[id - 1] = entity_set[id - 1][0][0] | (1ul << (daa_offset_width_ - 1));
         }
     }
     if (levels_buffer != 0)
@@ -211,7 +224,7 @@ void DAAs::BuildDAAs(std::vector<std::vector<std::vector<uint>>>& entity_set,
     daa_array_end_.CloseMap();
 }
 
-void DAAs::BuildToDAA(std::vector<uint>& c_set_id, std::vector<uint>& daa_offsets) {
+void DAAs::BuildToDAA(std::vector<uint>& c_set_id, std::vector<ulong>& daa_offsets) {
     std::string prefix = (type_ == DAAs::Type::kSPO) ? "spo" : "ops";
     ulong entity_cnt = c_set_id.size();
 
@@ -257,11 +270,13 @@ void DAAs::BuildToDAA(std::vector<uint>& c_set_id, std::vector<uint>& daa_offset
 void DAAs::Build(std::vector<uint>& c_set_id, std::vector<std::vector<std::vector<uint>>>& entity_set) {
     ulong entity_cnt = entity_set.size();
 
-    uint all_arr_size = EraseAndStatistic(c_set_id, entity_set);
+    uint all_set_size = EraseAndStatistic(c_set_id, entity_set);
 
     daa_offset_width_ = 32;
     if (compress_to_daa_ || compress_levels_) {
-        daa_offset_width_ = std::ceil(std::log2(all_arr_size));
+        daa_offset_width_ = std::ceil(std::log2(all_set_size));
+        // value flags
+        daa_offset_width_ += 1;
 
         MMap<uint> data_width = MMap<uint>(file_path_ + "data_width", 6 * 4);
         data_width[(type_ == DAAs::Type::kSPO) ? 0 : 3] = c_set_id_width_;
@@ -270,8 +285,8 @@ void DAAs::Build(std::vector<uint>& c_set_id, std::vector<std::vector<std::vecto
         data_width.CloseMap();
     }
 
-    std::vector<uint> daa_offsets(entity_cnt);
-    BuildDAAs(entity_set, daa_offsets, all_arr_size);
+    std::vector<ulong> daa_offsets(entity_cnt);
+    BuildDAAs(entity_set, daa_offsets);
     BuildToDAA(c_set_id, daa_offsets);
 }
 
@@ -335,13 +350,27 @@ uint DAAs::DAASize(uint id) {
 }
 
 std::pair<uint, uint> DAAs::DAAOffsetSize(uint id) {
-    uint daa_offset = 0;
-    uint daa_size = AccessToDAA((id - 1) * 2 + 1);  // where next daa start
-    if (id != 1) {
-        daa_offset = AccessToDAA((id - 2) * 2 + 1);
-        daa_size = daa_size - daa_offset;
+    uint temp = AccessToDAA((id - 1) * 2 + 1);
+    if ((temp & (1u << (daa_offset_width_ - 1))) != 0) {
+        temp &= ~(1u << (daa_offset_width_ - 1));
+        return {temp, 0};
+    } else {
+        uint daa_offset = 0;
+        uint daa_size = temp;  // where next daa start
+        if (id != 1) {
+            uint i = 1;
+            daa_offset = AccessToDAA((id - 1 - i) * 2 + 1);
+            while ((daa_offset & (1u << (daa_offset_width_ - 1))) != 0) {
+                i++;
+                if (id - 1 - i > 0)
+                    daa_offset = AccessToDAA((id - 1 - i) * 2 + 1);
+                else
+                    break;
+            }
+            daa_size = daa_size - daa_offset;
+        }
+        return {daa_offset, daa_size};
     }
-    return {daa_offset, daa_size};
 }
 
 std::span<uint> DAAs::AccessDAAAllArrays(uint id) {
@@ -451,17 +480,21 @@ uint DAAs::AccessLevels(ulong offset) {
 std::span<uint> DAAs::AccessDAA(uint id, uint pid, uint index) {
     auto [daa_offset, daa_size] = DAAOffsetSize(id);
 
+    std::span<uint>& offset2id =
+        (type_ == DAAs::Type::kSPO) ? predicate_index_p_->GetOSet(pid) : predicate_index_p_->GetSSet(pid);
+    std::vector<uint>* result = new std::vector<uint>;
+
+    if (daa_size == 0) {
+        result->push_back(offset2id[daa_offset]);
+        return std::span<uint>(*result);
+    }
+
     uint value;
     uint value_offset;
 
     value_offset = daa_offset + index;
     value = AccessLevels(value_offset);
-
-    std::vector<uint>* result = new std::vector<uint>;
     result->push_back(value);
-    
-    std::span<uint>& offset2id =
-        (type_ == DAAs::Type::kSPO) ? predicate_index_p_->GetOSet(pid) : predicate_index_p_->GetSSet(pid);
 
     One one = One(daa_level_end_, daa_offset, daa_offset + daa_size);
     if (daa_size == 1) {
