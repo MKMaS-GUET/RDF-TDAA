@@ -46,8 +46,8 @@ Dictionary::Dictionary(std::string& dict_path) : dict_path_(dict_path) {
             id2entity = Node<ulong>(dict_path_ + file_name);
     };
 
-    auto build_cache = [&](uint start, uint end) {
-        for (uint id = start; id <= end; id += 10) {
+    auto build_cache = [&](uint beg, uint end) {
+        for (uint id = beg; id <= end; id += 2000) {
             if (id <= shared_cnt())
                 delete[] ID2String(id, SPARQLParser::Term::Positon::kShared);
             else if (id <= shared_cnt() + subject_cnt())

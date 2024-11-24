@@ -1,7 +1,6 @@
 #ifndef PLAN_GENERATOR_HPP
 #define PLAN_GENERATOR_HPP
 
-#include <climits>
 #include <deque>
 #include <string>
 #include <unordered_map>
@@ -11,6 +10,7 @@
 #include "rdf-tdaa/utils/join_list.hpp"
 
 using AdjacencyList = std::unordered_map<std::string, std::vector<std::pair<std::string, uint>>>;
+using TripplePattern = std::vector<std::pair<std::array<SPARQLParser::Term, 3>, uint>>;
 
 class PlanGenerator {
    public:
@@ -37,7 +37,7 @@ class PlanGenerator {
         uint father_item_id;
         uint empty_item_level;
 
-        Item() = default;
+        Item();
 
         Item(const Item& other);
 
@@ -60,7 +60,6 @@ class PlanGenerator {
    private:
     bool debug_ = false;
     std::shared_ptr<IndexRetriever>& index_;
-    std::shared_ptr<SPARQLParser>& sparql_parser_;
     std::vector<Variable> variable_order_;
     hash_map<std::string, Variable*> value2variable_;
     std::vector<std::vector<Item>> query_plan_;
@@ -69,15 +68,6 @@ class PlanGenerator {
     std::vector<std::vector<std::span<uint>>> pre_results_;
     bool distinct_predicate_ = false;
     bool zero_result_ = false;
-
-    void SortVariables(AdjacencyList& query_graph_ud,
-                       hash_map<std::string, Variable>& univariates,
-                       hash_map<std::string, uint>& est_size);
-
-    void GenPlanTable();
-
-   public:
-    PlanGenerator(std::shared_ptr<IndexRetriever>& index, std::shared_ptr<SPARQLParser>& sparql_parser);
 
     void DFS(const AdjacencyList& graph,
              std::string vertex,
@@ -89,7 +79,27 @@ class PlanGenerator {
     std::vector<std::deque<std::string>> FindAllPathsInGraph(const AdjacencyList& graph,
                                                              const std::string& root);
 
-    void Generate();
+    AdjacencyList GenerateQueryGraph(TripplePattern& two_variable_tp);
+
+    std::vector<std::string> VariablePriority(TripplePattern& one_variable_tp,
+                                              TripplePattern& two_variable_tp,
+                                              phmap::flat_hash_map<std::string, uint>& variable_frequency);
+
+    std::vector<std::string> PathBasedSort(std::vector<std::deque<std::string>> all_paths,
+                                           phmap::flat_hash_map<std::string, uint> variable_priority);
+
+    void HandleUnsortedVariables(std::vector<std::string>& unsorted_variables,
+                                 phmap::flat_hash_map<std::string, uint> variable_priority);
+
+    void HandleThreeVariableTriplePattern(TripplePattern& three_variable_tp,
+                                          std::shared_ptr<SPARQLParser>& sparql_parser);
+
+    void GenPlanTable(TripplePattern& one_variable_tp,
+                      TripplePattern& two_variable_tp,
+                      TripplePattern& three_variable_tp);
+
+   public:
+    PlanGenerator(std::shared_ptr<IndexRetriever>& index, std::shared_ptr<SPARQLParser>& sparql_parser);
 
     std::vector<Variable> MappingVariable(const std::vector<std::string>& variables);
 

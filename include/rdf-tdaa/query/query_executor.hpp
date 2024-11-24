@@ -48,14 +48,14 @@ class QueryExecutor {
 
     void Next(Stat& stat);
 
-    void GenCondidateValue(Stat& stat);
+    void GenCandidateValue(Stat& stat);
 
     bool UpdateCurrentTuple(Stat& stat);
 
     bool FillEmptyItem(Stat& stat, uint entity);
 
    public:
-    std::span<uint> static LeapfrogJoin(std::vector<std::span<uint>>& lists);
+    std::span<uint> static LeapfrogJoin(const std::vector<std::span<uint>>& lists);
 
     QueryExecutor(std::shared_ptr<IndexRetriever> index,
                   std::shared_ptr<PlanGenerator>& plan,

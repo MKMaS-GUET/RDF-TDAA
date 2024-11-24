@@ -47,7 +47,7 @@ QueryExecutor::QueryExecutor(std::shared_ptr<IndexRetriever> index,
       limit_(limit),
       shared_cnt_(shared_cnt) {}
 
-std::span<uint> QueryExecutor::LeapfrogJoin(std::vector<std::span<uint>>& lists) {
+std::span<uint> QueryExecutor::LeapfrogJoin(const std::vector<std::span<uint>>& lists) {
     JoinList join_list;
     join_list.AddLists(lists);
 
@@ -139,7 +139,7 @@ void QueryExecutor::Down(Stat& stat) {
 
     // 如果当前层没有查询结果，就生成结果
     if (stat.candidate_value[stat.level].empty()) {
-        GenCondidateValue(stat);
+        GenCandidateValue(stat);
         if (stat.at_end)
             return;
     }
@@ -167,7 +167,7 @@ void QueryExecutor::Next(Stat& stat) {
         success = UpdateCurrentTuple(stat);
 }
 
-void QueryExecutor::GenCondidateValue(Stat& stat) {
+void QueryExecutor::GenCandidateValue(Stat& stat) {
     JoinList join_list;
 
     bool has_unariate_result = pre_results_[stat.level].size();

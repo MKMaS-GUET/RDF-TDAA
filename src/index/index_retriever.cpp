@@ -7,24 +7,23 @@
 IndexRetriever::IndexRetriever() {}
 
 IndexRetriever::IndexRetriever(std::string db_name) : db_path_(db_name) {
-    auto beg = std::chrono::high_resolution_clock::now();
-
     db_dictionary_path_ = db_path_ + "/dictionary/";
     db_index_path_ = db_path_ + "/index/";
 
+    auto beg = std::chrono::high_resolution_clock::now();
     dict_ = Dictionary(db_dictionary_path_);
+    auto end = std::chrono::high_resolution_clock::now();
+    std::chrono::duration<double, std::milli> diff = end - beg;
+    std::cout << "init string dictionary takes " << diff.count() << " ms." << std::endl;
+
     max_subject_id_ = dict_.shared_cnt() + dict_.subject_cnt();
 
     predicate_index_ = PredicateIndex(db_index_path_, dict_.predicate_cnt());
-    
+
     spo_ = DAAs(db_index_path_, DAAs::Type::kSPO, predicate_index_);
     spo_.Load();
     ops_ = DAAs(db_index_path_, DAAs::Type::kOPS, predicate_index_);
     ops_.Load();
-
-    auto end = std::chrono::high_resolution_clock::now();
-    std::chrono::duration<double, std::milli> diff = end - beg;
-    std::cout << "init db dictionary success. takes " << diff.count() << " ms." << std::endl;
 }
 
 ulong IndexRetriever::FileSize(std::string file_name) {

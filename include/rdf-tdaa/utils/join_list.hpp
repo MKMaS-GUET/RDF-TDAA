@@ -19,9 +19,9 @@ class JoinList {
 
     JoinList(std::vector<std::span<uint>>& lists);
 
-    void AddList(std::span<uint>& list);
+    void AddList(const std::span<uint>& list);
 
-    void AddLists(std::vector<std::span<uint>>& lists);
+    void AddLists(const std::vector<std::span<uint>>& lists);
 
     std::span<uint> Shortest();
 

@@ -8,26 +8,24 @@ JoinList::JoinList(std::vector<std::span<uint>>& lists) {
     AddLists(lists);
 }
 
-void JoinList::AddList(std::span<uint>& list) {
-    if (list.size() == 0)
-        return;
-    if (lists_.size() == 0) {
+void JoinList::AddList(const std::span<uint>& list) {
+    if (lists_.size() == 0 || list.size() == 0) {
         lists_.push_back(list);
         return;
     }
-
     uint first_val = list.operator[](0);
     for (long unsigned int i = 0; i < lists_.size(); i++) {
-        if (lists_[i][0] > first_val) {
-            lists_.insert(lists_.begin() + i, list);
-            return;
-        }
+        if (lists_[i].size() > 0)
+            if (lists_[i][0] > first_val) {
+                lists_.insert(lists_.begin() + i, list);
+                return;
+            }
     }
 
     lists_.push_back(list);
 }
 
-void JoinList::AddLists(std::vector<std::span<uint>>& lists) {
+void JoinList::AddLists(const std::vector<std::span<uint>>& lists) {
     for (auto it = lists.begin(); it != lists.end(); it++) {
         AddList(*it);
     }

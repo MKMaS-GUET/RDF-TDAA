@@ -17,8 +17,6 @@ class IndexRetriever {
     std::string db_dictionary_path_;
     std::string db_index_path_;
 
-    bool predicate_index_compressed_ = true;
-
     Dictionary dict_;
 
     DAAs spo_;
