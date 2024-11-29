@@ -47,7 +47,7 @@ Dictionary::Dictionary(std::string& dict_path) : dict_path_(dict_path) {
     };
 
     auto build_cache = [&](uint beg, uint end) {
-        for (uint id = beg; id <= end; id += 2000) {
+        for (uint id = beg; id <= end; id += 10) {
             if (id <= shared_cnt())
                 delete[] ID2String(id, SPARQLParser::Term::Positon::kShared);
             else if (id <= shared_cnt() + subject_cnt())

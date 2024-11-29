@@ -18,9 +18,13 @@
 namespace fs = std::filesystem;
 
 class IndexBuilder {
+    enum class Permutation { kSPO, kOPS };
+
     std::string data_file_;
     std::string db_index_path_;
     std::string db_dictionary_path_;
+    std::string spo_index_path_;
+    std::string ops_index_path_;
     std::string db_name_;
     ulong all_arr_size_ = 0;
 
@@ -34,12 +38,14 @@ class IndexBuilder {
 
     std::mutex mtx_;
 
-    void BuildCharacteristicSet(std::vector<uint>& c_set_id, std::vector<uint>& c_set_size, DAAs::Type type);
+    void BuildCharacteristicSet(std::vector<uint>& c_set_id,
+                                std::vector<uint>& c_set_size,
+                                Permutation permutation);
 
     void BuildEntitySets(PredicateIndex& predicate_index,
                          std::vector<uint>& c_set_size,
                          std::vector<std::vector<std::vector<uint>>>& entity_set,
-                         DAAs::Type type);
+                         Permutation permutation);
 
    public:
     IndexBuilder(std::string db_name, std::string data_file);

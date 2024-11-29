@@ -8,30 +8,9 @@
 #include "rdf-tdaa/index/predicate_index.hpp"
 #include "rdf-tdaa/utils/mmap.hpp"
 
-#define bit_set(bits, offset) ((bits)[(offset) / 8] |= (1 << (7 - (offset) % 8)))
-#define bit_get(bits, offset) (((bits)[(offset) / 8] >> (7 - (offset) % 8)) & 1)
-
-class One {
-    MMap<char>& bits_;
-
-    uint bit_offset_;
-    uint end_;
-
-   public:
-    One(MMap<char>& bits, uint begin, uint end);
-
-    // next one in [begin, end)
-    uint Next();
-};
-
-// ones in [begin, end)
-uint range_rank(MMap<char>& bits, uint begin, uint end);
-
 class DAAs {
    public:
-    enum Type { kSPO, kOPS };
-
-    struct DAA {
+    struct Structure {
         uint data_cnt;
         uint* levels;
         char* level_end;
@@ -40,65 +19,44 @@ class DAAs {
         void create(std::vector<std::vector<uint>>& arrays);
 
        public:
-        DAA(std::vector<std::vector<uint>>& arrays);
-        ~DAA();
+        Structure(std::vector<std::vector<uint>>& arrays);
+        ~Structure();
     };
 
    private:
-    uint AccessBitSequence(MMap<uint>& bits, uint data_width, ulong bit_start);
-
-    uint AccessToDAA(ulong offset);
-
-    std::pair<uint, uint> DAAOffsetSize(uint id);
-
-    bool compress_to_daa_ = true;
-    bool compress_levels_ = true;
-
     std::string file_path_;
-    DAAs::Type type_;
 
-    std::shared_ptr<PredicateIndex> predicate_index_p_;
+    std::vector<ulong> daa_offsets_;
 
-    CharacteristicSet subject_characteristic_set_;
-    CharacteristicSet object_characteristic_set_;
-
-    uint c_set_id_width_;
-    uint daa_offset_width_;
     uint daa_levels_width_;
-    MMap<uint> to_daa_;
     MMap<uint> daa_levels_;
     MMap<char> daa_level_end_;
     MMap<char> daa_array_end_;
 
-    uint EraseAndStatistic(std::vector<uint>& c_set_id,
-                           std::vector<std::vector<std::vector<uint>>>& entity_set);
+    void Preprocess(std::vector<std::vector<std::vector<uint>>>& entity_set);
 
-    void BuildDAAs(std::vector<std::vector<std::vector<uint>>>& entity_set, std::vector<ulong>& daa_offsets);
-
-    void BuildToDAA(std::vector<uint>& c_set_id, std::vector<ulong>& daa_offsets);
+    void BuildDAAs(std::vector<std::vector<std::vector<uint>>>& entity_set);
 
    public:
     DAAs();
+    DAAs(std::string file_path);
+    DAAs(std::string file_path, uint daa_levels_width);
 
-    DAAs(Type type);
+    void Build(std::vector<std::vector<std::vector<uint>>>& entity_set);
 
-    DAAs(std::string file_path, Type type);
-
-    DAAs(std::string file_path, Type type, PredicateIndex& predicate_index_);
-
-    void Build(std::vector<uint>& c_set_id, std::vector<std::vector<std::vector<uint>>>& entity_set);
+    std::vector<ulong>& daa_offsets();
 
     void Load();
 
-    std::span<uint>& CharacteristicSetOf(uint id);
-
-    uint DAASize(uint id);
-
     uint AccessLevels(ulong offset);
 
-    std::span<uint> AccessDAA(uint id, uint pid, uint offset);
+    std::span<uint> AccessDAA(uint daa_offset, uint daa_size, std::span<uint>& offset2id, uint index);
 
-    std::span<uint> AccessDAAAllArrays(uint id);
+    std::span<uint> AccessDAAAllArrays(uint daa_offset,
+                                       uint daa_size,
+                                       std::vector<std::span<uint>>& offset2id);
+
+    uint daa_levels_width();
 
     void Close();
 };

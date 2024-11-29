@@ -9,6 +9,7 @@
 #include <vector>
 #include "rdf-tdaa/dictionary/dictionary.hpp"
 #include "rdf-tdaa/index/characteristic_set.hpp"
+#include "rdf-tdaa/index/cs_daa_map.hpp"
 #include "rdf-tdaa/index/daas.hpp"
 #include "rdf-tdaa/index/predicate_index.hpp"
 
@@ -16,9 +17,14 @@ class IndexRetriever {
     std::string db_path_;
     std::string db_dictionary_path_;
     std::string db_index_path_;
+    std::string spo_index_path_;
+    std::string ops_index_path_;
 
     Dictionary dict_;
 
+    CharacteristicSet subject_characteristic_set_;
+    CharacteristicSet object_characteristic_set_;
+    CsDaaMap cs_daa_map_;
     DAAs spo_;
     DAAs ops_;
 
