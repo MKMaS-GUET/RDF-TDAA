@@ -131,15 +131,15 @@ uint CsDaaMap::ChararisticSetIdOf(uint id, Permutation permutation) {
     uint access_width = 0;
     if (id <= shared_id_size_) {
         if (permutation == Permutation::kSPO) {
-            bit_start = (id - 1) * shared_width_;
+            bit_start = (ulong(id) - 1) * shared_width_;
             access_width = cs_id_width_.first;
         }
         if (permutation == Permutation::kOPS) {
-            bit_start = (id - 1) * shared_width_ + (cs_id_width_.first + daa_offset_width_.first);
+            bit_start = (ulong(id) - 1) * shared_width_ + (cs_id_width_.first + daa_offset_width_.first);
             access_width = cs_id_width_.second;
         }
     } else {
-        bit_start = shared_id_size_ * shared_width_ + (id - shared_id_size_ - 1) * not_shared_width_;
+        bit_start = shared_id_size_ * shared_width_ + (ulong(id) - shared_id_size_ - 1) * not_shared_width_;
         access_width = not_shared_cs_id_width_;
     }
 
@@ -154,16 +154,16 @@ uint CsDaaMap::DAAOffsetOf(uint id, Permutation permutation) {
     uint access_width = 0;
     if (id <= shared_id_size_) {
         if (permutation == Permutation::kSPO) {
-            bit_start = (id - 1) * shared_width_ + cs_id_width_.first;
+            bit_start = (ulong(id) - 1) * shared_width_ + cs_id_width_.first;
             access_width = daa_offset_width_.first;
         }
         if (permutation == Permutation::kOPS) {
-            bit_start = (id - 1) * shared_width_ + (cs_id_width_.first + daa_offset_width_.first) +
+            bit_start = (ulong(id) - 1) * shared_width_ + (cs_id_width_.first + daa_offset_width_.first) +
                         cs_id_width_.second;
             access_width = daa_offset_width_.second;
         }
     } else {
-        bit_start = shared_id_size_ * shared_width_ + (id - shared_id_size_ - 1) * not_shared_width_ +
+        bit_start = shared_id_size_ * shared_width_ + (ulong(id) - shared_id_size_ - 1) * not_shared_width_ +
                     cs_id_width_.second;
         access_width = not_shared_daa_offset_width_;
     }

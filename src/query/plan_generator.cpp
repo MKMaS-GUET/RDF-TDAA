@@ -105,43 +105,13 @@ PlanGenerator::PlanGenerator(std::shared_ptr<IndexRetriever>& index,
     if (zero_result_)
         return;
 
-    std::vector<std::string> variable_sort =
+    phmap::flat_hash_map<std::string, uint> variable_priority =
         VariablePriority(one_variable_tp, two_variable_tp, variable_frequency);
     if (zero_result_ == true)
         return;
 
-    phmap::flat_hash_map<std::string, uint> variable_priority;
-    for (size_t i = 0; i < variable_sort.size(); i++)
-        variable_priority[variable_sort[i]] = i;
-
-    for (auto vertex_it = query_graph_ud.begin(); vertex_it != query_graph_ud.end(); vertex_it++) {
-        std::sort(vertex_it->second.begin(), vertex_it->second.end(),
-                  [&](const auto& edge1, const auto& edge2) {
-                      return variable_priority[edge1.first] < variable_priority[edge2.first];
-                  });
-    }
-
-    if (debug_) {
-        for (auto vertex_it = query_graph_ud.begin(); vertex_it != query_graph_ud.end(); vertex_it++) {
-            std::cout << vertex_it->first << ": ";
-            for (auto& edge : vertex_it->second)
-                std::cout << " (" << edge.first << "," << edge.second << ") ";
-            std::cout << std::endl;
-        }
-    }
-
     std::vector<std::deque<std::string>> all_paths;
-    std::vector<std::deque<std::string>> partial_paths;
-    while (variable_sort.size() > 0) {
-        partial_paths = FindAllPathsInGraph(query_graph_ud, variable_sort[0]);
-        for (auto& path : partial_paths) {
-            std::unordered_set<std::string> path_set(path.begin(), path.end());
-            variable_sort.erase(std::remove_if(variable_sort.begin(), variable_sort.end(),
-                                               [&path_set](std::string v) { return path_set.contains(v); }),
-                                variable_sort.end());
-            all_paths.push_back(path);
-        }
-    }
+    FindAllPaths(all_paths, query_graph_ud, variable_priority);
 
     if (debug_) {
         std::cout << "pathes: " << std::endl;
@@ -154,7 +124,6 @@ PlanGenerator::PlanGenerator(std::shared_ptr<IndexRetriever>& index,
     }
 
     std::vector<std::string> ends = PathBasedSort(all_paths, variable_priority);
-
     std::unordered_set<std::string> existing_elements(unsorted_variables.begin(), unsorted_variables.end());
     for (const auto& variable : ends) {
         if (existing_elements.find(variable) == existing_elements.end()) {
@@ -166,6 +135,11 @@ PlanGenerator::PlanGenerator(std::shared_ptr<IndexRetriever>& index,
     HandleUnsortedVariables(unsorted_variables, variable_priority);
     HandleThreeVariableTriplePattern(three_variable_tp, sparql_parser);
 
+    for (size_t i = 0; i < variable_order_.size(); ++i) {
+        variable_order_[i].priority = i;
+        value2variable_[variable_order_[i].value] = &variable_order_[i];
+    }
+
     if (debug_) {
         std::cout << "variables order: " << std::endl;
         for (auto it = variable_order_.begin(); it != variable_order_.end(); it++)
@@ -175,6 +149,17 @@ PlanGenerator::PlanGenerator(std::shared_ptr<IndexRetriever>& index,
     }
 
     GenPlanTable(one_variable_tp, two_variable_tp, three_variable_tp);
+
+    if (debug_) {
+        std::cout << "query plan: " << std::endl;
+        for (auto& item : query_plan_) {
+            for (auto& i : item) {
+                std::cout << i.retrieval_type << " ";
+            }
+            std::cout << std::endl;
+        }
+        std::cout << "------------------------------" << std::endl;
+    }
 }
 
 void PlanGenerator::DFS(const AdjacencyList& graph,
@@ -257,7 +242,7 @@ AdjacencyList PlanGenerator::GenerateQueryGraph(TripplePattern& two_variable_tp)
     return query_graph_ud;
 }
 
-std::vector<std::string> PlanGenerator::VariablePriority(
+phmap::flat_hash_map<std::string, uint> PlanGenerator::VariablePriority(
     TripplePattern& one_variable_tp,
     TripplePattern& two_variable_tp,
     phmap::flat_hash_map<std::string, uint>& variable_frequency) {
@@ -523,13 +508,59 @@ std::vector<std::string> PlanGenerator::VariablePriority(
         return est_size[var1] < est_size[var2];
     });
 
+    for (size_t i = 0; i < variable_sort.size(); i++)
+        variable_priority[variable_sort[i]] = i;
+
     if (debug_) {
         std::cout << "------------------------------" << std::endl;
         for (auto& v : variable_sort)
             std::cout << v << ": " << variable_frequency[v] << " " << est_size[v] << std::endl;
     }
 
-    return variable_sort;
+    return variable_priority;
+}
+
+void PlanGenerator::FindAllPaths(std::vector<std::deque<std::string>>& all_paths,
+                                 AdjacencyList& query_graph_ud,
+                                 phmap::flat_hash_map<std::string, uint>& variable_priority) {
+    std::vector<std::string> variable_order(query_graph_ud.size());
+    std::transform(query_graph_ud.begin(), query_graph_ud.end(), variable_order.begin(),
+                   [](const auto& pair) { return pair.first; });
+    std::sort(variable_order.begin(), variable_order.end(), [&](const auto& var1, const auto& var2) {
+        return variable_priority[var1] < variable_priority[var2];
+    });
+
+    for (auto vertex_it = query_graph_ud.begin(); vertex_it != query_graph_ud.end(); vertex_it++) {
+        std::sort(vertex_it->second.begin(), vertex_it->second.end(),
+                  [&](const auto& edge1, const auto& edge2) {
+                      return variable_priority[edge1.first] < variable_priority[edge2.first];
+                  });
+    }
+
+    if (debug_) {
+        for (auto vertex_it = query_graph_ud.begin(); vertex_it != query_graph_ud.end(); vertex_it++) {
+            std::cout << vertex_it->first << ": ";
+            for (auto& edge : vertex_it->second)
+                std::cout << " (" << edge.first << "," << edge.second << ") ";
+            std::cout << std::endl;
+        }
+    }
+
+    std::vector<std::deque<std::string>> partial_paths;
+    if (query_graph_ud.size() != 0) {
+        // 考虑非连通图
+        while (variable_order.size() > 0) {
+            partial_paths = FindAllPathsInGraph(query_graph_ud, variable_order[0]);
+            for (auto& path : partial_paths) {
+                std::unordered_set<std::string> path_set(path.begin(), path.end());
+                variable_order.erase(
+                    std::remove_if(variable_order.begin(), variable_order.end(),
+                                   [&path_set](std::string v) { return path_set.contains(v); }),
+                    variable_order.end());
+                all_paths.push_back(path);
+            }
+        }
+    }
 }
 
 std::vector<std::string> PlanGenerator::PathBasedSort(
@@ -589,11 +620,6 @@ void PlanGenerator::HandleUnsortedVariables(std::vector<std::string>& unsorted_v
         }
         if (!contains)
             variable_order_.push_back(*it);
-    }
-
-    for (size_t i = 0; i < variable_order_.size(); ++i) {
-        variable_order_[i].priority = i;
-        value2variable_[variable_order_[i].value] = &variable_order_[i];
     }
 }
 
@@ -739,42 +765,41 @@ void PlanGenerator::GenPlanTable(TripplePattern& one_variable_tp,
         auto& [s, p, o] = tp.first;
         value2variable_[s.value]->position = Term::Positon::kSubject;
         value2variable_[p.value]->position = Term::Positon::kPredicate;
-        std::vector<std::pair<Positon, uint>> pattern_variable_order = {
+        std::vector<std::pair<Positon, uint>> pattern_variable_level = {
             {Positon::kSubject, value2variable_[s.value]->priority},
             {Positon::kPredicate, value2variable_[p.value]->priority}};
         if (!distinct_predicate_) {
             value2variable_[o.value]->position = Term::Positon::kObject;
-            pattern_variable_order.push_back({Positon::kObject, value2variable_[o.value]->priority});
+            pattern_variable_level.push_back({Positon::kObject, value2variable_[o.value]->priority});
         }
 
-        std::sort(pattern_variable_order.begin(), pattern_variable_order.end(),
+        std::sort(pattern_variable_level.begin(), pattern_variable_level.end(),
                   [&](const auto& var1, const auto& var2) { return var1.second < var2.second; });
-
         uint max = (distinct_predicate_) ? 2 : 3;
         for (uint i = 0; i < max; i++) {
             Item empty_item;
             if (i == 0) {
-                if (pattern_variable_order[0].first == Positon::kSubject &&
-                    pattern_variable_order[1].first == Positon::kPredicate) {
+                if (pattern_variable_level[0].first == Positon::kSubject &&
+                    pattern_variable_level[1].first == Positon::kPredicate) {
                     empty_item.retrieval_type = Item::RType::kGetSPreSet;
                 }
-                if (pattern_variable_order[0].first == Positon::kObject &&
-                    pattern_variable_order[1].first == Positon::kPredicate) {
+                if (pattern_variable_level[0].first == Positon::kObject &&
+                    pattern_variable_level[1].first == Positon::kPredicate) {
                     empty_item.retrieval_type = Item::RType::kGetOPreSet;
                 }
-                empty_item.empty_item_level = pattern_variable_order[1].second;
+                empty_item.empty_item_level = pattern_variable_level[1].second;
             }
             if (i == 1) {
-                if (pattern_variable_order[1].first == Positon::kPredicate &&
-                    pattern_variable_order[2].first == Positon::kObject) {
+                if (pattern_variable_level[1].first == Positon::kPredicate &&
+                    pattern_variable_level[2].first == Positon::kObject) {
                     empty_item.retrieval_type = Item::RType::kGetBySP;
                 }
-                if (pattern_variable_order[1].first == Positon::kPredicate &&
-                    pattern_variable_order[2].first == Positon::kSubject) {
+                if (pattern_variable_level[1].first == Positon::kPredicate &&
+                    pattern_variable_level[2].first == Positon::kSubject) {
                     empty_item.retrieval_type = Item::RType::kGetByOP;
                 }
-                empty_item.father_item_id = pattern_variable_order[0].second;
-                empty_item.empty_item_level = (distinct_predicate_) ? 0 : pattern_variable_order[2].second;
+                empty_item.father_item_id = pattern_variable_level[0].second;
+                empty_item.empty_item_level = (distinct_predicate_) ? 0 : pattern_variable_level[2].second;
             }
             if (i == 2) {
                 empty_item.retrieval_type = Item::RType::kNone;
@@ -785,7 +810,7 @@ void PlanGenerator::GenPlanTable(TripplePattern& one_variable_tp,
             empty_item.prestore_type = Item::PType::kEmpty;
             empty_item.index_result = std::span<uint>();
             empty_item.triple_pattern_id = tp.second;
-            uint level = pattern_variable_order[i].second;
+            uint level = pattern_variable_level[i].second;
             query_plan_[level].push_back(empty_item);
             empty_item_indices_[level].push_back(query_plan_[level].size() - 1);
         }

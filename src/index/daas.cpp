@@ -188,6 +188,14 @@ void DAAs::Load() {
 std::span<uint> DAAs::AccessDAAAllArrays(uint daa_offset,
                                          uint daa_size,
                                          std::vector<std::span<uint>>& offset2id) {
+    std::vector<uint>* result = new std::vector<uint>();
+
+    if (daa_size == 0) {
+        for (uint i = 0; i < offset2id.size(); i++) 
+            result->push_back(offset2id[i][daa_offset]);
+        return std::span<uint>(*result);
+    }
+
     ulong bit_start = daa_offset * ulong(daa_levels_width_);
 
     uint uint_base = bit_start / 32;
@@ -220,8 +228,6 @@ std::span<uint> DAAs::AccessDAAAllArrays(uint daa_offset,
         if (offset_in_uint == 32)
             offset_in_uint = 0;
     }
-
-    std::vector<uint>* result = new std::vector<uint>();
 
     if (daa_size == 1) {
         result->push_back(offset2id[0][levels_mem[0]]);

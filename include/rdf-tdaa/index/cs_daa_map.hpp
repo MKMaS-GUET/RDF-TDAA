@@ -14,16 +14,16 @@ class CsDaaMap {
     std::string file_path_;
     MMap<uint> cs_daa_map_;
 
-    std::pair<uint, uint> cs_id_width_;
-    std::pair<uint, uint> daa_offset_width_;
-    uint shared_width_;
-    uint not_shared_width_;
-    uint not_shared_cs_id_width_;
-    uint not_shared_daa_offset_width_;
-    uint shared_cnt_;
-    uint subject_cnt_;
-    uint object_cnt_;
-    uint shared_id_size_;
+    std::pair<ulong, ulong> cs_id_width_;
+    std::pair<ulong, ulong> daa_offset_width_;
+    ulong shared_width_;
+    ulong not_shared_width_;
+    ulong not_shared_cs_id_width_;
+    ulong not_shared_daa_offset_width_;
+    ulong shared_cnt_;
+    ulong subject_cnt_;
+    ulong object_cnt_;
+    ulong shared_id_size_;
 
     uint DAAOffsetOf(uint id, Permutation permutation);
 

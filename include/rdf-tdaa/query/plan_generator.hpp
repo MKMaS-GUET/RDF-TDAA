@@ -81,9 +81,14 @@ class PlanGenerator {
 
     AdjacencyList GenerateQueryGraph(TripplePattern& two_variable_tp);
 
-    std::vector<std::string> VariablePriority(TripplePattern& one_variable_tp,
-                                              TripplePattern& two_variable_tp,
-                                              phmap::flat_hash_map<std::string, uint>& variable_frequency);
+    phmap::flat_hash_map<std::string, uint> VariablePriority(
+        TripplePattern& one_variable_tp,
+        TripplePattern& two_variable_tp,
+        phmap::flat_hash_map<std::string, uint>& variable_frequency);
+
+    void FindAllPaths(std::vector<std::deque<std::string>>& all_paths,
+                      AdjacencyList& query_graph_ud,
+                      phmap::flat_hash_map<std::string, uint>& variable_priority);
 
     std::vector<std::string> PathBasedSort(std::vector<std::deque<std::string>> all_paths,
                                            phmap::flat_hash_map<std::string, uint> variable_priority);
