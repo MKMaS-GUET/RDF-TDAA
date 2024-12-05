@@ -58,7 +58,7 @@ class PlanGenerator {
     };
 
    private:
-    bool debug_ = false;
+    bool debug_ = true;
     std::shared_ptr<IndexRetriever>& index_;
     std::vector<Variable> variable_order_;
     hash_map<std::string, Variable*> value2variable_;

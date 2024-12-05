@@ -135,6 +135,31 @@ PlanGenerator::PlanGenerator(std::shared_ptr<IndexRetriever>& index,
     HandleUnsortedVariables(unsorted_variables, variable_priority);
     HandleThreeVariableTriplePattern(three_variable_tp, sparql_parser);
 
+    // {"?x1", "?x2", "?x3", "?x4"}; 714.31     938.473     1105.34
+    // {"?x1", "?x2", "?x4", "?x3"}; 802.362    944.436     1079.22
+    // {"?x1", "?x3", "?x2", "?x4"}; 829.604    983.058     3239.88
+    // {"?x1", "?x3", "?x4", "?x2"}; 820.904    1153.37     34665.2
+    // {"?x1", "?x4", "?x2", "?x3"}; 1027.75    3606.71     36626.1
+    // {"?x1", "?x4", "?x3", "?x2"}; 1052.22    3596.07     39528.2
+    // {"?x2", "?x1", "?x3", "?x4"}; 240.331    718.209     279.715
+    // {"?x2", "?x1", "?x4", "?x3"}; 369.768    731.068     284.544
+    // {"?x2", "?x3", "?x1", "?x4"}; 432.42     4608.49     2095.59
+    // {"?x2", "?x3", "?x4", "?x1"}; 444.527    4595.26     2084.04
+    // {"?x2", "?x4", "?x1", "?x3"}; 381.925    700.808     286.831
+    // {"?x2", "?x4", "?x3", "?x1"}; 393.454    622.86      464.586
+    // {"?x3", "?x1", "?x2", "?x4"}; 991.309    980.657     1299.33
+    // {"?x3", "?x1", "?x4", "?x2"}; 983.728    962.769     25501
+    // {"?x3", "?x2", "?x1", "?x4"}; 325.604    1136.82     230.804
+    // {"?x3", "?x2", "?x4", "?x1"}; 318.746    1138.61     229.426
+    // {"?x3", "?x4", "?x1", "?x2"}; 843.942    896.594     87584.3
+    // {"?x3", "?x4", "?x2", "?x1"}; 769.821    924.417     1216.9
+    // {"?x4", "?x1", "?x2", "?x3"}; 1168.3     3690.63     36560.3
+    // {"?x4", "?x1", "?x3", "?x2"}; 1163.86    3655.02     42505.9
+    // {"?x4", "?x2", "?x1", "?x3"}; 273.723    627.882     1056.32
+    // {"?x4", "?x2", "?x3", "?x1"}; 269.347    607.544     1208.17
+    // {"?x4", "?x3", "?x1", "?x2"}; 1060.76    466.864     108570
+    // {"?x4", "?x3", "?x2", "?x1"}; 234.78     557.053     10196.3
+
     for (size_t i = 0; i < variable_order_.size(); ++i) {
         variable_order_[i].priority = i;
         value2variable_[variable_order_[i].value] = &variable_order_[i];
@@ -566,9 +591,6 @@ void PlanGenerator::FindAllPaths(std::vector<std::deque<std::string>>& all_paths
 std::vector<std::string> PlanGenerator::PathBasedSort(
     std::vector<std::deque<std::string>> all_paths,
     phmap::flat_hash_map<std::string, uint> variable_priority) {
-    // all_paths[0] = {"?x2", "?x1", "?x3", "?x4"};
-    // all_paths[0] = {"?x2", "?x4", "?x3", "?x1"};
-
     std::vector<std::string> ends;
     while (!all_paths.empty()) {
         std::string higher_priority_variable;

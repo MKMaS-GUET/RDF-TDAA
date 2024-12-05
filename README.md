@@ -11,12 +11,6 @@ git clone git@github.com:MKMaS-GUET/RDF-TDAA.git
 git submodule update --init
 ```
 
-Maybe it's need to update the submodule for this project
-
-```shell
-git submodule update --remote
-```
-
 2. Build this project 
 
 ```shell
@@ -40,6 +34,14 @@ Download the RDF data and queries that we want to use:
 Our RDF engines benchmark is available [here](https://github.com/liuyipeng42/rdf_engines_benchmark)
 
 ## How to use
+
+Examples:
+
+  rdftdaa build -d db_name --file mydata.nt
+
+  rdftdaa query -d db_name --file query.sparql  # One query per line in the SPARQL query file
+
+  rdftdaa server -d db_name --ip 127.0.0.1 --port 8080
 
 ```
 Usage: rdftdaa [COMMAND] [OPTIONS]
