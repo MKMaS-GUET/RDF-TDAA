@@ -1,6 +1,6 @@
 # RDF-TDAA
 
-RDF-TDAA: Efficient **RDF** Indexing with a **T**rie Based on **D**irectly **A**ddressable **A**rrays
+RDF-TDAA: Optimizing **RDF** Indexing and Querying with a **T**rie Based on **D**irectly **A**ddressable **A**rrays and a Path-Based Strategy
 
 ## How to build
 
