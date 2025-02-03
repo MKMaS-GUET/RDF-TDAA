@@ -18,8 +18,6 @@ void DictionaryBuilder::Init() {
 }
 
 void DictionaryBuilder::BuildDict() {
-    uint temp_node_id = 1;
-    uint sid = 0, oid = 0;
     hash_map<std::string, uint>::iterator s_it, o_it, shared_it;
     std::string s, p, o;
     std::ifstream fin(file_path_, std::ios::in);
@@ -35,41 +33,22 @@ void DictionaryBuilder::BuildDict() {
         if (shared_it == shared_.end()) {
             o_it = objects_.find(s);
             if (o_it != objects_.end()) {
-                sid = o_it->second;
-                shared_.insert({s, sid});
+                shared_.insert({s, 0});
                 objects_.erase(s);
             } else {
-                auto ret = subjects_.insert({s, temp_node_id});
-                if (ret.second) {
-                    sid = temp_node_id;
-                    temp_node_id++;
-                } else {
-                    sid = ret.first->second;
-                }
+                subjects_.insert({s, 0});
             }
-        } else {
-            sid = shared_it->second;
         }
 
         shared_it = shared_.find(o);
         if (shared_it == shared_.end()) {
             s_it = subjects_.find(o);
             if (s_it != subjects_.end()) {
-                oid = s_it->second;
-                shared_.insert({o, oid});
+                shared_.insert({o, 0});
                 subjects_.erase(o);
             } else {
-                auto ret = objects_.insert({o, temp_node_id});
-
-                if (ret.second) {
-                    oid = temp_node_id;
-                    temp_node_id++;
-                } else {
-                    oid = ret.first->second;
-                }
+                objects_.insert({o, 0});
             }
-        } else {
-            oid = shared_it->second;
         }
 
         predicates_.insert({p, predicates_.size() + 1});

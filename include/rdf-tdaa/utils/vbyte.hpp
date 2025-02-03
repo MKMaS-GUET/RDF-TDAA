@@ -1,5 +1,5 @@
+#include <cstdint>
 #include <string>
-#include "sys/types.h"
 
 std::pair<uint8_t*, uint> Compress(uint* data, uint size);
 

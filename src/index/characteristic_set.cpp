@@ -98,7 +98,7 @@ void CharacteristicSet::Build(std::vector<std::pair<uint8_t*, uint>>& compressed
     for (uint set_id = 1; set_id <= compressed_sets.size(); set_id++)
         compressed_size += compressed_sets[set_id - 1].second;
 
-    MMap<uint> c_sets_offset_size = MMap<uint>(file_path_, compressed_sets.size() * 4 + compressed_size);
+    MMap<uint> c_sets_offset_size = MMap<uint>(file_path_, base + compressed_size);
     c_sets_offset_size.Write(compressed_sets.size());
     uint offset = 0;
     for (uint set_id = 1; set_id <= compressed_sets.size(); set_id++) {

@@ -36,6 +36,8 @@ class QueryExecutor {
     std::vector<std::span<uint>> pre_join_;
     uint limit_;
     uint shared_cnt_;
+    bool skip_pre_result_;
+
     std::chrono::duration<double, std::milli> query_duration_;
 
     std::span<uint> static LeapfrogJoin(JoinList& lists);

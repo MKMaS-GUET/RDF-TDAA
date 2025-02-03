@@ -174,7 +174,11 @@ void QueryExecutor::GenCandidateValue(Stat& stat) {
     bool has_empty_item_ = empty_item_indices_[stat.level].size();
     bool has_filled_item = filled_item_indices_[stat.level].size();
 
-    join_list.AddLists(pre_results_[stat.level]);
+    if (skip_pre_result_)
+        has_unariate_result = false;
+    else
+        join_list.AddLists(pre_results_[stat.level]);
+
     for (const auto& idx : empty_item_indices_[stat.level]) {
         if (stat.plan[stat.level][idx].index_result.size() != 0)
             join_list.AddList(stat.plan[stat.level][idx].index_result);
@@ -295,6 +299,26 @@ bool QueryExecutor::FillEmptyItem(Stat& stat, uint value) {
 void QueryExecutor::Query() {
     auto begin = std::chrono::high_resolution_clock::now();
 
+    uint cnt = 0;
+    for (uint i = 1; i < pre_results_.size(); i++) {
+        if (pre_results_[i].size() > 0)
+            cnt += pre_results_[i].size();
+    }
+
+    skip_pre_result_ = false;
+    if (cnt > 1) {
+        skip_pre_result_ = true;
+        for (auto& r : pre_results_) {
+            for (auto& rr : r) {
+                if (rr.size() < 100000) {
+                    skip_pre_result_ = false;
+                    break;
+                }
+            }
+        }
+    }
+    std::cout << skip_pre_result_ << std::endl;
+
     if (!PreJoin())
         return;
 
@@ -315,6 +339,35 @@ void QueryExecutor::Query() {
                 Down(stat_);
             }
         }
+    }
+
+    if (skip_pre_result_) {
+        std::vector<phmap::flat_hash_set<uint>> filters(pre_results_.size());
+        for (uint i = 1; i < pre_results_.size(); i++) {
+            JoinList lists;
+            lists.AddLists(pre_results_[i]);
+            auto result = LeapfrogJoin(lists);
+            for (auto e : result)
+                filters[i].insert(e);
+        }
+        auto& old_result = stat_.result;
+        std::shared_ptr<std::vector<std::vector<uint>>> new_result =
+            std::make_shared<std::vector<std::vector<uint>>>();
+        for (auto& r : *old_result) {
+            bool pass = true;
+            for (uint i = 0; i < pre_results_.size(); i++) {
+                if (filters[i].size()) {
+                    if (!filters[i].contains(r[i])) {
+                        pass = false;
+                        break;
+                    }
+                }
+            }
+            if (pass)
+                new_result->push_back(r);
+        }
+        stat_.result->clear();
+        stat_.result = new_result;
     }
 
     auto end = std::chrono::high_resolution_clock::now();
