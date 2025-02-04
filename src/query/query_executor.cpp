@@ -310,14 +310,13 @@ void QueryExecutor::Query() {
         skip_pre_result_ = true;
         for (auto& r : pre_results_) {
             for (auto& rr : r) {
-                if (rr.size() < 100000) {
+                if (rr.size() < 100) {
                     skip_pre_result_ = false;
                     break;
                 }
             }
         }
     }
-    std::cout << skip_pre_result_ << std::endl;
 
     if (!PreJoin())
         return;
@@ -346,18 +345,19 @@ void QueryExecutor::Query() {
         for (uint i = 1; i < pre_results_.size(); i++) {
             JoinList lists;
             lists.AddLists(pre_results_[i]);
-            auto result = LeapfrogJoin(lists);
-            for (auto e : result)
-                filters[i].insert(e);
+            if (lists.Size() != 1) 
+                pre_results_[i][0] = LeapfrogJoin(lists);
         }
+
         auto& old_result = stat_.result;
         std::shared_ptr<std::vector<std::vector<uint>>> new_result =
             std::make_shared<std::vector<std::vector<uint>>>();
         for (auto& r : *old_result) {
             bool pass = true;
-            for (uint i = 0; i < pre_results_.size(); i++) {
-                if (filters[i].size()) {
-                    if (!filters[i].contains(r[i])) {
+            for (uint i = 1; i < pre_results_.size(); i++) {
+                if (pre_results_[i].size()) {
+                    if (*std::lower_bound(pre_results_[i][0].begin(), pre_results_[i][0].end(), r[i]) !=
+                        r[i]) {
                         pass = false;
                         break;
                     }
