@@ -2,6 +2,8 @@
 
 RDF-TDAA: Optimizing **RDF** Indexing and Querying with a **T**rie Based on **D**irectly **A**ddressable **A**rrays and a Path-Based Strategy
 
+This repository contains the source code for our paper published in *Expert Systems with Applications*.
+
 ## How to build
 
 1. Clone this project
@@ -11,7 +13,7 @@ git clone git@github.com:MKMaS-GUET/RDF-TDAA.git
 git submodule update --init
 ```
 
-2. Build this project 
+2. Build this project
 
 ```shell
 cmake -B build -DCMAKE_BUILD_TYPE=Release
@@ -30,6 +32,8 @@ Download the RDF data and queries that we want to use:
 - 1 [Watdiv100M](https://mega.nz/folder/4r1iRCZZ#JKCi9mCCMKOaXadr73kDdQ)
 - 2 [Wikidata](https://mega.nz/folder/5vUBHKTQ#TwpzwSzWhzniK1CeykxUCw)
 - 3 [DBpedia](https://mega.nz/folder/luMREDjQ#hQpRCZGsRrfLhXMLwCHYpQ)
+- 4 [swdf](https://mega.nz/folder/svNClRwD#BPKADgJF4A5oxYpihY45KA)
+- 5 [yago2](https://mega.nz/folder/pukjHKJa#cVEkbkF4pWlS26mIldkSTw)
 
 Our RDF engines benchmark is available [here](https://github.com/liuyipeng42/rdf_engines_benchmark)
 
