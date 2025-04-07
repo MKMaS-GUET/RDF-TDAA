@@ -31,18 +31,6 @@ void JoinList::AddLists(const std::vector<std::span<uint>>& lists) {
     }
 }
 
-std::span<uint> JoinList::Shortest() {
-    long unsigned int min_i = 0;
-    long unsigned int min = lists_[0].size();
-    for (long unsigned int i = 0; i < lists_.size(); i++) {
-        if (lists_[i].size() < min) {
-            min = lists_[i].size();
-            min_i = i;
-        }
-    }
-    return lists_[min_i];
-}
-
 void JoinList::UpdateCurrentPostion() {
     for (long unsigned int i = 0; i < lists_.size(); i++) {
         list_current_pos_.push_back(lists_[i].begin());
@@ -79,15 +67,6 @@ uint JoinList::GetCurrentValOfList(int i) {
 
 void JoinList::NextVal(int i) {
     list_current_pos_[i]++;
-}
-
-std::span<uint> JoinList::GetShortest() {
-    uint idx = 0;
-    for (long unsigned int i = 0; i < lists_.size(); i++) {
-        if (lists_[i].size() < lists_[idx].size())
-            idx = i;
-    }
-    return lists_[idx];
 }
 
 std::span<uint> JoinList::GetListByIndex(int i) {
