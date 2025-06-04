@@ -59,7 +59,7 @@ void DictionaryBuilder::BuildDict() {
             std::cout << triplet_loaded_ << " triples processed\r" << std::flush;
         }
     }
-    std::cout << triplet_loaded_ << std::endl;
+    std::cout << triplet_loaded_ << " triples processed\r" << std::endl;
     malloc_trim(0);
 
     fin.close();
@@ -236,7 +236,7 @@ void DictionaryBuilder::EncodeRDF(hash_map<uint, std::vector<std::pair<uint, uin
             std::cout << triplet_cnt << " triples processed\r" << std::flush;
         }
     }
-    std::cout << triplet_cnt << std::endl;
+    std::cout << triplet_cnt << " triples processed\r" << std::endl;
 
     fin.close();
 }

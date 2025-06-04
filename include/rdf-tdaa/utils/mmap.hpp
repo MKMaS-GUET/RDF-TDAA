@@ -53,7 +53,11 @@ class MMap {
         Create(path, size_);
     }
 
-    MMap(std::string path, ulong size) : path_(path), size_(size), offset_(0) { Create(path, size); }
+    MMap(std::string path, ulong size) : path_(path), size_(size), offset_(0) {
+        if (size_ < sizeof(T))
+            size_ = sizeof(T);
+        Create(path, size_);
+    }
 
     void Write(T data) {
         if (offset_ >= 0 && offset_ < size_ / sizeof(T)) {

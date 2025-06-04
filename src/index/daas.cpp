@@ -90,7 +90,7 @@ void DAAs::Preprocess(std::vector<std::vector<std::vector<uint>>>& entity_set) {
         }
     }
 
-    daa_levels_width_ = std::ceil(std::log2(max));
+    daa_levels_width_ = std::floor(std::log2(max) + 1);
 }
 
 void DAAs::BuildDAAs(std::vector<std::vector<std::vector<uint>>>& entity_set) {
@@ -103,7 +103,7 @@ void DAAs::BuildDAAs(std::vector<std::vector<std::vector<uint>>>& entity_set) {
                 levels_size += entity_set[id - 1][p].size();
         }
     }
-    uint daa_offset_width = std::ceil(std::log2(levels_size)) + 1;
+    uint daa_offset_width = std::floor(std::log2(levels_size) + 1) + 1;
 
     ulong file_size;
     file_size = ulong(levels_size * ulong(daa_levels_width_) + 7ul) / 8ul;
