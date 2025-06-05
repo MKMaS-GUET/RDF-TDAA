@@ -35,12 +35,12 @@ CsDaaMap::CsDaaMap(std::string file_path,
 
 void CsDaaMap::Build(std::pair<std::vector<uint>&, std::vector<ulong>&> spo_map,
                      std::pair<std::vector<uint>&, std::vector<ulong>&> ops_map) {
-    cs_id_width_.first = std::ceil(std::log2(*std::max_element(spo_map.first.begin(), spo_map.first.end())));
-    cs_id_width_.second = std::ceil(std::log2(*std::max_element(ops_map.first.begin(), ops_map.first.end())));
+    cs_id_width_.first = std::floor(std::log2(*std::max_element(spo_map.first.begin(), spo_map.first.end())) + 1);
+    cs_id_width_.second = std::floor(std::log2(*std::max_element(ops_map.first.begin(), ops_map.first.end())) + 1);
     daa_offset_width_.first =
-        std::ceil(std::log2(*std::max_element(spo_map.second.begin(), spo_map.second.end())));
+        std::floor(std::log2(*std::max_element(spo_map.second.begin(), spo_map.second.end())) + 1);
     daa_offset_width_.second =
-        std::ceil(std::log2(*std::max_element(ops_map.second.begin(), ops_map.second.end())));
+        std::floor(std::log2(*std::max_element(ops_map.second.begin(), ops_map.second.end())) + 1);
 
     not_shared_cs_id_width_ = cs_id_width_.second;
     not_shared_daa_offset_width_ = daa_offset_width_.second;

@@ -54,8 +54,8 @@ class MMap {
     }
 
     MMap(std::string path, ulong size) : path_(path), size_(size), offset_(0) {
-        if (size_ < sizeof(T))
-            size_ = sizeof(T);
+        if (size_ % sizeof(T) != 0)
+            size_ += sizeof(T) - (size_ % sizeof(T));
         Create(path, size_);
     }
 
