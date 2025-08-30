@@ -1,7 +1,6 @@
 #include "rdf-tdaa/query/query_executor.hpp"
 
-QueryExecutor::Stat::Stat(const std::vector<std::vector<PlanGenerator::Item>>& p)
-    : at_end(false), level(-1), plan(p) {
+QueryExecutor::Stat::Stat(const std::vector<std::vector<PlanGenerator::Item>>& p) : at_end(false), level(-1), plan(p) {
     size_t n = plan.size();
     candidate_indices.resize(n);
     candidate_value.resize(n);
@@ -126,7 +125,7 @@ bool QueryExecutor::PreJoin() {
         }
         if (join_list.Size() > 1) {
             pre_join_[level] = LeapfrogJoin(join_list);
-            if (pre_join_[level].size() == 0)
+            if (pre_join_[level].size() == 0) 
                 return false;
         }
         join_list.Clear();
@@ -136,7 +135,6 @@ bool QueryExecutor::PreJoin() {
 
 void QueryExecutor::Down(Stat& stat) {
     ++stat.level;
-
     // 如果当前层没有查询结果，就生成结果
     if (stat.candidate_value[stat.level].empty()) {
         GenCandidateValue(stat);
@@ -208,7 +206,6 @@ void QueryExecutor::GenCandidateValue(Stat& stat) {
         (!has_unariate_result && has_empty_item_ && !has_filled_item && join_list.Size() > 1)) {
         stat.candidate_value[stat.level] = LeapfrogJoin(join_list);
     }
-
     // 变量的交集为空
     if (stat.candidate_value[stat.level].empty()) {
         stat.at_end = true;
@@ -258,8 +255,8 @@ bool QueryExecutor::FillEmptyItem(Stat& stat, uint value) {
                     if (item.prestore_type == PType::kPredicate)
                         r = index_->GetBySP(id, value);
                     if (item.prestore_type == PType::kEmpty) {
-                        uint subject = stat.candidate_value[item.father_item_id]
-                                                           [stat.candidate_indices[item.father_item_id] - 1];
+                        uint subject =
+                            stat.candidate_value[item.father_item_id][stat.candidate_indices[item.father_item_id] - 1];
                         r = index_->GetBySP(subject, value);
                     }
 
@@ -271,8 +268,8 @@ bool QueryExecutor::FillEmptyItem(Stat& stat, uint value) {
                     if (item.prestore_type == PType::kPredicate)
                         r = index_->GetByOP(id, value);
                     if (item.prestore_type == PType::kEmpty) {
-                        uint object = stat.candidate_value[item.father_item_id]
-                                                          [stat.candidate_indices[item.father_item_id] - 1];
+                        uint object =
+                            stat.candidate_value[item.father_item_id][stat.candidate_indices[item.father_item_id] - 1];
                         r = index_->GetByOP(object, value);
                     }
                     empty_item.index_result = r;
@@ -299,24 +296,24 @@ bool QueryExecutor::FillEmptyItem(Stat& stat, uint value) {
 void QueryExecutor::Query() {
     auto begin = std::chrono::high_resolution_clock::now();
 
-    uint cnt = 0;
-    for (uint i = 1; i < pre_results_.size(); i++) {
-        if (pre_results_[i].size() > 0)
-            cnt += pre_results_[i].size();
-    }
+    // uint cnt = 0;
+    // for (uint i = 1; i < pre_results_.size(); i++) {
+    //     if (pre_results_[i].size() > 0)
+    //         cnt += pre_results_[i].size();
+    // }
 
     skip_pre_result_ = false;
-    if (cnt > 1) {
-        skip_pre_result_ = true;
-        for (auto& r : pre_results_) {
-            for (auto& rr : r) {
-                if (rr.size() < 100) {
-                    skip_pre_result_ = false;
-                    break;
-                }
-            }
-        }
-    }
+    // if (cnt > 1) {
+    //     skip_pre_result_ = true;
+    //     for (auto& r : pre_results_) {
+    //         for (auto& rr : r) {
+    //             if (rr.size() < 100) {
+    //                 skip_pre_result_ = false;
+    //                 break;
+    //             }
+    //         }
+    //     }
+    // }
 
     if (!PreJoin())
         return;
@@ -331,6 +328,9 @@ void QueryExecutor::Query() {
             // 补完一个查询结果
             if (stat_.level == int(stat_.plan.size() - 1)) {
                 stat_.result->push_back(stat_.current_tuple);
+                // if (stat_.result->size() % 100000 == 0) {
+                //     std::cout << stat_.result->size() << std::endl;
+                // }
                 if (stat_.result->size() >= limit_)
                     break;
                 Next(stat_);
@@ -340,35 +340,33 @@ void QueryExecutor::Query() {
         }
     }
 
-    if (skip_pre_result_) {
-        std::vector<phmap::flat_hash_set<uint>> filters(pre_results_.size());
-        for (uint i = 1; i < pre_results_.size(); i++) {
-            JoinList lists;
-            lists.AddLists(pre_results_[i]);
-            if (lists.Size() != 1) 
-                pre_results_[i][0] = LeapfrogJoin(lists);
-        }
+    // if (skip_pre_result_) {
+    //     std::vector<phmap::flat_hash_set<uint>> filters(pre_results_.size());
+    //     for (uint i = 1; i < pre_results_.size(); i++) {
+    //         JoinList lists;
+    //         lists.AddLists(pre_results_[i]);
+    //         if (lists.Size() != 1)
+    //             pre_results_[i][0] = LeapfrogJoin(lists);
+    //     }
 
-        auto& old_result = stat_.result;
-        std::shared_ptr<std::vector<std::vector<uint>>> new_result =
-            std::make_shared<std::vector<std::vector<uint>>>();
-        for (auto& r : *old_result) {
-            bool pass = true;
-            for (uint i = 1; i < pre_results_.size(); i++) {
-                if (pre_results_[i].size()) {
-                    if (*std::lower_bound(pre_results_[i][0].begin(), pre_results_[i][0].end(), r[i]) !=
-                        r[i]) {
-                        pass = false;
-                        break;
-                    }
-                }
-            }
-            if (pass)
-                new_result->push_back(r);
-        }
-        stat_.result->clear();
-        stat_.result = new_result;
-    }
+    //     auto& old_result = stat_.result;
+    //     std::shared_ptr<std::vector<std::vector<uint>>> new_result = std::make_shared<std::vector<std::vector<uint>>>();
+    //     for (auto& r : *old_result) {
+    //         bool pass = true;
+    //         for (uint i = 1; i < pre_results_.size(); i++) {
+    //             if (pre_results_[i].size()) {
+    //                 if (*std::lower_bound(pre_results_[i][0].begin(), pre_results_[i][0].end(), r[i]) != r[i]) {
+    //                     pass = false;
+    //                     break;
+    //                 }
+    //             }
+    //         }
+    //         if (pass)
+    //             new_result->push_back(r);
+    //     }
+    //     stat_.result->clear();
+    //     stat_.result = new_result;
+    // }
 
     auto end = std::chrono::high_resolution_clock::now();
     query_duration_ = end - begin;

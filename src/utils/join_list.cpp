@@ -38,27 +38,30 @@ void JoinList::UpdateCurrentPostion() {
 }
 
 void JoinList::Seek(int i, uint val) {
-    std::span<uint>& p_r = lists_[i];
-
-    auto it = list_current_pos_[i];
-    auto end = p_r.end();
-    for (; it < end; it = it + 2) {
-        if (*it >= val) {
+    auto& list = lists_[i];
+    if (true) {
+        list_current_pos_[i] = std::lower_bound(list.begin(), list.end(), val);
+    } else {
+        auto it = list_current_pos_[i];
+        auto end = list.end();
+        for (; it < end; it = it + 2) {
+            if (*it >= val) {
+                if (*(it - 1) >= val) {
+                    list_current_pos_[i] = it - 1;
+                    return;
+                }
+                list_current_pos_[i] = it;
+                return;
+            }
+        }
+        if (it == end) {
             if (*(it - 1) >= val) {
                 list_current_pos_[i] = it - 1;
                 return;
             }
-            list_current_pos_[i] = it;
-            return;
         }
+        list_current_pos_[i] = end;
     }
-    if (it == end) {
-        if (*(it - 1) >= val) {
-            list_current_pos_[i] = it - 1;
-            return;
-        }
-    }
-    list_current_pos_[i] = end;
 }
 
 uint JoinList::GetCurrentValOfList(int i) {

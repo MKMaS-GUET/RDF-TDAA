@@ -56,8 +56,7 @@ PlanGenerator::Variable& PlanGenerator::Variable::operator=(const Variable& othe
     return *this;
 }
 
-PlanGenerator::PlanGenerator(std::shared_ptr<IndexRetriever>& index,
-                             std::shared_ptr<SPARQLParser>& sparql_parser)
+PlanGenerator::PlanGenerator(std::shared_ptr<IndexRetriever>& index, std::shared_ptr<SPARQLParser>& sparql_parser)
     : index_(index) {
     const std::vector<SPARQLParser::TriplePattern>& triple_partterns = sparql_parser->TriplePatterns();
 
@@ -140,7 +139,7 @@ PlanGenerator::PlanGenerator(std::shared_ptr<IndexRetriever>& index,
         value2variable_[variable_order_[i].value] = &variable_order_[i];
     }
 
-    if (debug_) {
+    if (true) {
         std::cout << "variables order: " << std::endl;
         for (auto it = variable_order_.begin(); it != variable_order_.end(); it++)
             std::cout << it->value << " ";
@@ -397,15 +396,13 @@ void PlanGenerator::FindAllPaths(std::vector<std::deque<std::string>>& all_paths
     std::vector<std::string> variable_order(query_graph_ud.size());
     std::transform(query_graph_ud.begin(), query_graph_ud.end(), variable_order.begin(),
                    [](const auto& pair) { return pair.first; });
-    std::sort(variable_order.begin(), variable_order.end(), [&](const auto& var1, const auto& var2) {
-        return variable_priority[var1] < variable_priority[var2];
-    });
+    std::sort(variable_order.begin(), variable_order.end(),
+              [&](const auto& var1, const auto& var2) { return variable_priority[var1] < variable_priority[var2]; });
 
     for (auto vertex_it = query_graph_ud.begin(); vertex_it != query_graph_ud.end(); vertex_it++) {
-        std::sort(vertex_it->second.begin(), vertex_it->second.end(),
-                  [&](const auto& edge1, const auto& edge2) {
-                      return variable_priority[edge1.first] < variable_priority[edge2.first];
-                  });
+        std::sort(vertex_it->second.begin(), vertex_it->second.end(), [&](const auto& edge1, const auto& edge2) {
+            return variable_priority[edge1.first] < variable_priority[edge2.first];
+        });
     }
 
     if (debug_) {
@@ -417,6 +414,11 @@ void PlanGenerator::FindAllPaths(std::vector<std::deque<std::string>>& all_paths
         }
     }
 
+    if (query_graph_ud.size() == 1) {
+        all_paths.push_back({query_graph_ud.begin()->first});
+        return;
+    }
+
     std::vector<std::deque<std::string>> partial_paths;
     if (query_graph_ud.size() != 0) {
         // 考虑非连通图
@@ -424,19 +426,17 @@ void PlanGenerator::FindAllPaths(std::vector<std::deque<std::string>>& all_paths
             partial_paths = FindAllPathsInGraph(query_graph_ud, variable_order[0]);
             for (auto& path : partial_paths) {
                 std::unordered_set<std::string> path_set(path.begin(), path.end());
-                variable_order.erase(
-                    std::remove_if(variable_order.begin(), variable_order.end(),
-                                   [&path_set](std::string v) { return path_set.contains(v); }),
-                    variable_order.end());
+                variable_order.erase(std::remove_if(variable_order.begin(), variable_order.end(),
+                                                    [&path_set](std::string v) { return path_set.contains(v); }),
+                                     variable_order.end());
                 all_paths.push_back(path);
             }
         }
     }
 }
 
-std::vector<std::string> PlanGenerator::PathBasedSort(
-    std::vector<std::deque<std::string>> all_paths,
-    phmap::flat_hash_map<std::string, uint> variable_priority) {
+std::vector<std::string> PlanGenerator::PathBasedSort(std::vector<std::deque<std::string>> all_paths,
+                                                      phmap::flat_hash_map<std::string, uint> variable_priority) {
     std::vector<std::string> ends;
     while (!all_paths.empty()) {
         std::string higher_priority_variable;
@@ -467,18 +467,16 @@ std::vector<std::string> PlanGenerator::PathBasedSort(
         }
     }
 
-    std::sort(ends.begin(), ends.end(), [&](const auto& var1, const auto& var2) {
-        return variable_priority[var1] < variable_priority[var2];
-    });
+    std::sort(ends.begin(), ends.end(),
+              [&](const auto& var1, const auto& var2) { return variable_priority[var1] < variable_priority[var2]; });
 
     return ends;
 }
 
 void PlanGenerator::HandleUnsortedVariables(std::vector<std::string>& unsorted_variables,
                                             phmap::flat_hash_map<std::string, uint> variable_priority) {
-    std::sort(unsorted_variables.begin(), unsorted_variables.end(), [&](const auto& var1, const auto& var2) {
-        return variable_priority[var1] < variable_priority[var2];
-    });
+    std::sort(unsorted_variables.begin(), unsorted_variables.end(),
+              [&](const auto& var1, const auto& var2) { return variable_priority[var1] < variable_priority[var2]; });
 
     for (auto it = unsorted_variables.begin(); it != unsorted_variables.end(); it++) {
         bool contains = false;
@@ -597,17 +595,14 @@ void PlanGenerator::GenPlanTable(TripplePattern& one_variable_tp,
         };
 
         if (!s.IsVariable() && p.IsVariable() && o.IsVariable()) {
-            process_filled_item(s, p, o, Positon::kPredicate, Positon::kObject, PType::kPredicate,
-                                PType::kObject, RType::kGetBySP, RType::kGetBySO, &IndexRetriever::GetSPreSet,
-                                &IndexRetriever::GetByS);
+            process_filled_item(s, p, o, Positon::kPredicate, Positon::kObject, PType::kPredicate, PType::kObject,
+                                RType::kGetBySP, RType::kGetBySO, &IndexRetriever::GetSPreSet, &IndexRetriever::GetByS);
         } else if (s.IsVariable() && !p.IsVariable() && o.IsVariable()) {
             process_filled_item(p, s, o, Positon::kSubject, Positon::kObject, PType::kPreSub, PType::kPreObj,
-                                RType::kGetBySP, RType::kGetByOP, &IndexRetriever::GetSSet,
-                                &IndexRetriever::GetOSet);
+                                RType::kGetBySP, RType::kGetByOP, &IndexRetriever::GetSSet, &IndexRetriever::GetOSet);
         } else if (s.IsVariable() && p.IsVariable() && !o.IsVariable()) {
-            process_filled_item(o, s, p, Positon::kSubject, Positon::kPredicate, PType::kSubject,
-                                PType::kPredicate, RType::kGetBySO, RType::kGetByOP, &IndexRetriever::GetByO,
-                                &IndexRetriever::GetOPreSet);
+            process_filled_item(o, s, p, Positon::kSubject, Positon::kPredicate, PType::kSubject, PType::kPredicate,
+                                RType::kGetBySO, RType::kGetByOP, &IndexRetriever::GetByO, &IndexRetriever::GetOPreSet);
         }
 
         uint higher_priority = is_first_prior ? first_priority : second_priority;
@@ -685,8 +680,7 @@ void PlanGenerator::GenPlanTable(TripplePattern& one_variable_tp,
     }
 }
 
-std::vector<PlanGenerator::Variable> PlanGenerator::MappingVariable(
-    const std::vector<std::string>& variables) {
+std::vector<PlanGenerator::Variable> PlanGenerator::MappingVariable(const std::vector<std::string>& variables) {
     std::vector<Variable> ret;
     ret.reserve(variables.size());
     for (const auto& var : variables)

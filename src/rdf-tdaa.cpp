@@ -50,9 +50,8 @@ uint QueryResult(std::vector<std::vector<uint>>& result,
                     indexes_to_remove.insert(idx.priority);
 
                 not_projection_variable_index.erase(
-                    std::remove_if(
-                        not_projection_variable_index.begin(), not_projection_variable_index.end(),
-                        [&indexes_to_remove](uint value) { return indexes_to_remove.count(value) > 0; }),
+                    std::remove_if(not_projection_variable_index.begin(), not_projection_variable_index.end(),
+                                   [&indexes_to_remove](uint value) { return indexes_to_remove.count(value) > 0; }),
                     not_projection_variable_index.end());
 
                 for (uint result_id = 0; result_id < result.size(); result_id++) {
@@ -66,11 +65,10 @@ uint QueryResult(std::vector<std::vector<uint>>& result,
                                // 判断两个列表 a 和 b 是否相同，
                                [&](const std::vector<uint>& a, const std::vector<uint>& b) {
                                    // std::all_of 可以用来判断数组中的值是否都满足一个条件
-                                   return std::all_of(variable_indexes.begin(), variable_indexes.end(),
-                                                      // 判断依据是，列表中的每一个元素都相同
-                                                      [&](PlanGenerator::Variable v) {
-                                                          return a[v.priority] == b[v.priority];
-                                                      });
+                                   return std::all_of(
+                                       variable_indexes.begin(), variable_indexes.end(),
+                                       // 判断依据是，列表中的每一个元素都相同
+                                       [&](PlanGenerator::Variable v) { return a[v.priority] == b[v.priority]; });
                                });
         }
         for (auto it = result.begin(); it != last; ++it) {
@@ -117,6 +115,7 @@ void RDFTDAA::Query(const std::string& db_path, const std::string& data_file) {
         }
 
         std::ios::sync_with_stdio(false);
+        double all_time = 0;
         for (long unsigned int i = 0; i < sparqls.size(); i++) {
             std::string sparql = sparqls[i];
 
@@ -132,8 +131,7 @@ void RDFTDAA::Query(const std::string& db_path, const std::string& data_file) {
             auto query_plan = std::make_shared<PlanGenerator>(index, parser);
             auto plan_end = std::chrono::high_resolution_clock::now();
 
-            auto executor =
-                std::make_shared<QueryExecutor>(index, query_plan, parser->Limit(), index->shared_cnt());
+            auto executor = std::make_shared<QueryExecutor>(index, query_plan, parser->Limit(), index->shared_cnt());
             if (!query_plan->zero_result())
                 executor->Query();
 
@@ -152,7 +150,9 @@ void RDFTDAA::Query(const std::string& db_path, const std::string& data_file) {
             std::cout << "execute takes " << executor->query_duration() << " ms.\n";
             std::cout << "projection takes " << mapping_diff.count() << " ms.\n";
             std::cout << "query cost " << diff.count() << " ms." << std::endl;
+            all_time += diff.count();
         }
+        // std::cout << "avg query time: " << all_time / sparqls.size() << std::endl;
         exit(0);
     }
 }
